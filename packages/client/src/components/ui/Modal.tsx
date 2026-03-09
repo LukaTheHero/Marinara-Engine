@@ -51,7 +51,7 @@ export function Modal({ open, onClose, title, children, width = "max-w-md" }: Mo
 
           {/* Panel - OS Window style */}
           <motion.div
-            className={`os-window relative w-full ${width} shadow-2xl shadow-black/50`}
+            className={`os-window relative flex w-full flex-col ${width} max-h-[90vh] shadow-2xl shadow-black/50`}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -60,7 +60,7 @@ export function Modal({ open, onClose, title, children, width = "max-w-md" }: Mo
             {/* Pastel gradient title bar */}
             <div className="pastel-gradient h-[3px]" />
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-[var(--y2k-purple)]/20 px-5 py-3.5">
+            <div className="shrink-0 flex items-center justify-between border-b border-[var(--y2k-purple)]/20 px-5 py-3.5">
               <h2 className="text-sm font-semibold text-[var(--y2k-lavender)]">{title}</h2>
               <button
                 onClick={onClose}
@@ -71,7 +71,7 @@ export function Modal({ open, onClose, title, children, width = "max-w-md" }: Mo
             </div>
 
             {/* Content */}
-            <div className="px-5 py-4">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
           </motion.div>
         </motion.div>
       )}

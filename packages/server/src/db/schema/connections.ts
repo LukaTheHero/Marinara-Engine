@@ -17,6 +17,8 @@ export const apiConnections = sqliteTable("api_connections", {
   isDefault: text("is_default").notNull().default("false"),
   /** Whether this connection is part of the random-selection pool */
   useForRandom: text("use_for_random").notNull().default("false"),
+  /** Whether to enable Anthropic prompt caching */
+  enableCaching: text("enable_caching").notNull().default("false"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

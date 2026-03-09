@@ -5,12 +5,7 @@
 //           Appearance, Scenario
 // ──────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  usePersonas,
-  useUpdatePersona,
-  useUploadPersonaAvatar,
-  useDeletePersona,
-} from "../../hooks/use-characters";
+import { usePersonas, useUpdatePersona, useUploadPersonaAvatar, useDeletePersona } from "../../hooks/use-characters";
 import { useUIStore } from "../../stores/ui.store";
 import {
   ArrowLeft,
@@ -25,10 +20,15 @@ import {
   Trash2,
   AlertTriangle,
   Palette,
+  Download,
+  Activity,
+  Plus,
+  X,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { ColorPicker } from "../ui/ColorPicker";
+import { api } from "../../lib/api-client";
 
 // ── Tabs ──
 const TABS = [
@@ -38,6 +38,7 @@ const TABS = [
   { id: "appearance", label: "Appearance", icon: Eye },
   { id: "scenario", label: "Scenario", icon: MapPin },
   { id: "colors", label: "Colors", icon: Palette },
+  { id: "stats", label: "Stats", icon: Activity },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -52,6 +53,7 @@ interface PersonaFormData {
   nameColor: string;
   dialogueColor: string;
   boxColor: string;
+  personaStats: string;
 }
 
 interface PersonaRow {
@@ -67,6 +69,7 @@ interface PersonaRow {
   nameColor?: string;
   dialogueColor?: string;
   boxColor?: string;
+  personaStats?: string;
 }
 
 export function PersonaEditor() {
@@ -86,9 +89,7 @@ export function PersonaEditor() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Find the persona from the list
-  const rawPersona = (allPersonas as PersonaRow[] | undefined)?.find(
-    (p) => p.id === personaId,
-  );
+  const rawPersona = (allPersonas as PersonaRow[] | undefined)?.find((p) => p.id === personaId);
 
   // Parse persona into form data when it loads
   useEffect(() => {
@@ -103,17 +104,15 @@ export function PersonaEditor() {
       nameColor: rawPersona.nameColor ?? "",
       dialogueColor: rawPersona.dialogueColor ?? "",
       boxColor: rawPersona.boxColor ?? "",
+      personaStats: rawPersona.personaStats ?? "",
     });
     setAvatarPreview(rawPersona.avatarPath);
   }, [rawPersona]);
 
-  const updateField = useCallback(
-    <K extends keyof PersonaFormData>(key: K, value: PersonaFormData[K]) => {
-      setFormData((prev) => (prev ? { ...prev, [key]: value } : prev));
-      setDirty(true);
-    },
-    [],
-  );
+  const updateField = useCallback(<K extends keyof PersonaFormData>(key: K, value: PersonaFormData[K]) => {
+    setFormData((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setDirty(true);
+  }, []);
 
   const handleSave = async () => {
     if (!personaId || !formData) return;
@@ -204,13 +203,7 @@ export function PersonaEditor() {
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
             <Camera size={16} className="text-white" />
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleAvatarUpload}
-          />
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -225,6 +218,15 @@ export function PersonaEditor() {
             <HelpTooltip text="This is how the AI sees you. Fill in description, personality, backstory, and appearance — just like a character card. The active persona is injected into every prompt." />
           </p>
         </div>
+
+        {/* Export */}
+        <button
+          onClick={() => api.download(`/characters/personas/${personaId}/export`)}
+          className="rounded-xl p-2 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+          title="Export persona"
+        >
+          <Download size={18} />
+        </button>
 
         {/* Delete */}
         <button
@@ -255,9 +257,7 @@ export function PersonaEditor() {
       {showUnsavedWarning && (
         <div className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
           <AlertTriangle size={15} className="shrink-0 text-amber-500" />
-          <p className="flex-1 text-xs font-medium text-amber-500">
-            You have unsaved changes. Close without saving?
-          </p>
+          <p className="flex-1 text-xs font-medium text-amber-500">You have unsaved changes. Close without saving?</p>
           <button
             onClick={() => setShowUnsavedWarning(false)}
             className="rounded-lg px-3 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)]"
@@ -271,7 +271,10 @@ export function PersonaEditor() {
             Discard & close
           </button>
           <button
-            onClick={async () => { await handleSave(); closeDetail(); }}
+            onClick={async () => {
+              await handleSave();
+              closeDetail();
+            }}
             className="rounded-lg bg-gradient-to-r from-emerald-400 to-teal-500 px-3 py-1 text-xs font-medium text-white shadow-sm transition-all hover:shadow-md"
           >
             Save & close
@@ -356,9 +359,8 @@ export function PersonaEditor() {
                 rows={8}
               />
             )}
-            {activeTab === "colors" && (
-              <PersonaColorsTab formData={formData} updateField={updateField} />
-            )}
+            {activeTab === "colors" && <PersonaColorsTab formData={formData} updateField={updateField} />}
+            {activeTab === "stats" && <PersonaStatsTab formData={formData} updateField={updateField} />}
           </div>
         </div>
       </div>
@@ -386,7 +388,7 @@ function PersonaColorsTab({
       <div className="rounded-xl border border-[var(--border)] bg-black/30 p-4 space-y-3">
         <p className="text-[10px] font-medium uppercase tracking-widest text-[var(--muted-foreground)]">Preview</p>
         <div className="flex gap-3 flex-row-reverse">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 ring-2 ring-blue-400/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-neutral-500 to-neutral-600 ring-2 ring-white/15">
             <User size={16} className="text-white" />
           </div>
           <div className="flex-1 space-y-1 items-end flex flex-col">
@@ -395,22 +397,27 @@ function PersonaColorsTab({
               style={
                 formData.nameColor
                   ? formData.nameColor.startsWith("linear-gradient")
-                    ? { background: formData.nameColor, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+                    ? {
+                        background: formData.nameColor,
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                      }
                     : { color: formData.nameColor }
-                  : { color: "rgb(147, 197, 253)" }
+                  : { color: "rgb(212, 212, 212)" }
               }
             >
               {formData.name || "You"}
             </span>
             <div
-              className="rounded-2xl rounded-tr-sm px-4 py-3 text-[13px] leading-[1.8] backdrop-blur-md ring-1 ring-blue-400/15"
+              className="rounded-2xl rounded-tr-sm px-4 py-3 text-[13px] leading-[1.8] backdrop-blur-md ring-1 ring-white/10"
               style={
                 formData.boxColor
                   ? { backgroundColor: formData.boxColor }
-                  : { backgroundColor: "rgba(37, 99, 235, 0.3)" }
+                  : { backgroundColor: "rgba(255, 255, 255, 0.12)" }
               }
             >
-              <span className="text-blue-50">*You step forward confidently.* </span>
+              <span className="text-neutral-100">*You step forward confidently.* </span>
               <strong
                 style={formData.dialogueColor ? { color: formData.dialogueColor } : { color: "rgb(255, 255, 255)" }}
               >
@@ -435,7 +442,9 @@ function PersonaColorsTab({
         value={formData.dialogueColor}
         onChange={(v) => updateField("dialogueColor", v)}
         label="Dialogue Highlight Color"
-        helpText={'Text inside quotation marks ("", \u201c\u201d, \u00ab\u00bb) will be automatically bold and colored with this.'}
+        helpText={
+          'Text inside quotation marks ("", \u201c\u201d, \u00ab\u00bb) will be automatically bold and colored with this.'
+        }
       />
 
       {/* Box Color */}
@@ -449,6 +458,393 @@ function PersonaColorsTab({
   );
 }
 
+// ── Persona Stats Tab ──
+
+interface PersonaStatBar {
+  name: string;
+  value: number;
+  max: number;
+  color: string;
+}
+
+interface PersonaRPGAttribute {
+  name: string;
+  value: number;
+  max: number;
+}
+
+interface PersonaRPGStats {
+  enabled: boolean;
+  attributes: PersonaRPGAttribute[];
+  hp: { value: number; max: number };
+  mp: { value: number; max: number };
+}
+
+interface PersonaStatsData {
+  enabled: boolean;
+  bars: PersonaStatBar[];
+  rpgStats?: PersonaRPGStats;
+}
+
+const DEFAULT_RPG_STATS: PersonaRPGStats = {
+  enabled: false,
+  attributes: [
+    { name: "STR", value: 10, max: 20 },
+    { name: "DEX", value: 10, max: 20 },
+    { name: "CON", value: 10, max: 20 },
+    { name: "INT", value: 10, max: 20 },
+    { name: "WIS", value: 10, max: 20 },
+    { name: "CHA", value: 10, max: 20 },
+  ],
+  hp: { value: 100, max: 100 },
+  mp: { value: 50, max: 50 },
+};
+
+const DEFAULT_PERSONA_STATS: PersonaStatsData = {
+  enabled: false,
+  bars: [
+    { name: "Satiety", value: 80, max: 100, color: "#f59e0b" },
+    { name: "Energy", value: 90, max: 100, color: "#22c55e" },
+    { name: "Hygiene", value: 95, max: 100, color: "#3b82f6" },
+    { name: "Mood", value: 75, max: 100, color: "#ec4899" },
+  ],
+  rpgStats: DEFAULT_RPG_STATS,
+};
+
+function PersonaStatsTab({
+  formData,
+  updateField,
+}: {
+  formData: PersonaFormData;
+  updateField: <K extends keyof PersonaFormData>(key: K, value: PersonaFormData[K]) => void;
+}) {
+  const parsed: PersonaStatsData = formData.personaStats
+    ? (() => {
+        try {
+          return JSON.parse(formData.personaStats) as PersonaStatsData;
+        } catch {
+          return DEFAULT_PERSONA_STATS;
+        }
+      })()
+    : DEFAULT_PERSONA_STATS;
+
+  const save = (next: PersonaStatsData) => {
+    updateField("personaStats", JSON.stringify(next));
+  };
+
+  const updateBar = (index: number, field: string, value: string | number) => {
+    const next = [...parsed.bars];
+    next[index] = { ...next[index], [field]: value };
+    save({ ...parsed, bars: next });
+  };
+
+  const addBar = () => {
+    save({ ...parsed, bars: [...parsed.bars, { name: "New Stat", value: 50, max: 100, color: "#8b5cf6" }] });
+  };
+
+  const removeBar = (index: number) => {
+    save({ ...parsed, bars: parsed.bars.filter((_, i) => i !== index) });
+  };
+
+  // RPG Attributes helpers
+  const rpgStats: PersonaRPGStats = parsed.rpgStats ?? DEFAULT_RPG_STATS;
+
+  const updateRpg = (patch: Partial<PersonaRPGStats>) => {
+    save({ ...parsed, rpgStats: { ...rpgStats, ...patch } });
+  };
+
+  const updateRpgAttribute = (index: number, field: string, value: string | number) => {
+    const next = [...rpgStats.attributes];
+    next[index] = { ...next[index], [field]: value };
+    updateRpg({ attributes: next });
+  };
+
+  const addRpgAttribute = () => {
+    updateRpg({ attributes: [...rpgStats.attributes, { name: "NEW", value: 10, max: 20 }] });
+  };
+
+  const removeRpgAttribute = (index: number) => {
+    updateRpg({ attributes: rpgStats.attributes.filter((_, i) => i !== index) });
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="Persona Status Bars"
+        subtitle="Track your persona's physical and mental needs. These are updated by the Persona Stats agent after each message."
+      />
+
+      {/* Enable toggle */}
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <input
+          type="checkbox"
+          checked={parsed.enabled}
+          onChange={(e) => save({ ...parsed, enabled: e.target.checked })}
+          className="h-4 w-4 rounded accent-emerald-500"
+        />
+        <div>
+          <p className="text-sm font-medium">Enable Persona Stats</p>
+          <p className="text-[11px] text-[var(--muted-foreground)]">
+            Tracked by the Persona Stats agent. Stats appear in the HUD and are adjusted based on narrative events.
+          </p>
+        </div>
+      </label>
+
+      {parsed.enabled && (
+        <>
+          {/* Stat bars */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Status Bars</h3>
+              <button
+                onClick={addBar}
+                className="flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/25"
+              >
+                <Plus size={12} />
+                Add
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {parsed.bars.map((bar, i) => (
+                <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={bar.color}
+                      onChange={(e) => updateBar(i, "color", e.target.value)}
+                      className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent"
+                    />
+                    <input
+                      value={bar.name}
+                      onChange={(e) => updateBar(i, "name", e.target.value)}
+                      className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-xs font-medium"
+                      placeholder="Stat name"
+                    />
+                    <input
+                      type="number"
+                      value={bar.value}
+                      onChange={(e) => updateBar(i, "value", parseInt(e.target.value) || 0)}
+                      className="w-14 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-center text-xs"
+                      min={0}
+                      max={bar.max}
+                    />
+                    <span className="text-[10px] text-[var(--muted-foreground)]">/</span>
+                    <input
+                      type="number"
+                      value={bar.max}
+                      onChange={(e) => updateBar(i, "max", parseInt(e.target.value) || 1)}
+                      className="w-14 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-center text-xs"
+                      min={1}
+                    />
+                    <button
+                      onClick={() => removeBar(i)}
+                      className="rounded-lg p-1 text-[var(--muted-foreground)] transition-colors hover:bg-red-500/15 hover:text-red-400"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-black/30">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, (bar.value / Math.max(1, bar.max)) * 100)}%`,
+                        backgroundColor: bar.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="rounded-xl bg-[var(--card)] p-4 ring-1 ring-[var(--border)]">
+            <h4 className="mb-1.5 text-xs font-semibold">How persona stats work</h4>
+            <ul className="space-y-1 text-[11px] text-[var(--muted-foreground)]">
+              <li>
+                &bull; <strong className="text-[var(--foreground)]">Status bars</strong> — Represent your persona&apos;s
+                physical and mental state (hunger, energy, hygiene, etc.)
+              </li>
+              <li>
+                &bull; The <strong className="text-[var(--foreground)]">Persona Stats agent</strong> adjusts values
+                realistically based on what happens in the narrative.
+              </li>
+              <li>
+                &bull; Bars are displayed in the <strong className="text-[var(--foreground)]">HUD widget</strong> during
+                chat with color-coded gradients.
+              </li>
+              <li>&bull; Values set here serve as the initial defaults for new conversations.</li>
+            </ul>
+          </div>
+        </>
+      )}
+
+      {/* ── RPG Attributes ── */}
+      <div className="border-t border-[var(--border)] pt-6">
+        <SectionHeader
+          title="RPG Attributes"
+          subtitle="Define your persona's RPG stats (STR, DEX, etc.), HP, and MP — just like character cards. Tracked by the Character Tracker agent."
+        />
+
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+          <input
+            type="checkbox"
+            checked={rpgStats.enabled}
+            onChange={(e) => updateRpg({ enabled: e.target.checked })}
+            className="h-4 w-4 rounded accent-purple-500"
+          />
+          <div>
+            <p className="text-sm font-medium">Enable RPG Attributes</p>
+            <p className="text-[11px] text-[var(--muted-foreground)]">
+              Attributes are injected into the prompt and tracked by the Character Tracker agent, just like character
+              stats.
+            </p>
+          </div>
+        </label>
+
+        {rpgStats.enabled && (
+          <>
+            {/* HP / MP */}
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-red-500" />
+                  <span className="text-xs font-semibold">Hit Points (HP)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={rpgStats.hp.value}
+                    onChange={(e) => updateRpg({ hp: { ...rpgStats.hp, value: parseInt(e.target.value) || 0 } })}
+                    className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                  />
+                  <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                  <input
+                    type="number"
+                    value={rpgStats.hp.max}
+                    onChange={(e) => updateRpg({ hp: { ...rpgStats.hp, max: parseInt(e.target.value) || 1 } })}
+                    className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                  />
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-black/30">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-red-600 to-red-400 transition-all"
+                    style={{ width: `${Math.min(100, (rpgStats.hp.value / Math.max(1, rpgStats.hp.max)) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-blue-500" />
+                  <span className="text-xs font-semibold">Mana Points (MP)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={rpgStats.mp.value}
+                    onChange={(e) => updateRpg({ mp: { ...rpgStats.mp, value: parseInt(e.target.value) || 0 } })}
+                    className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                  />
+                  <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                  <input
+                    type="number"
+                    value={rpgStats.mp.max}
+                    onChange={(e) => updateRpg({ mp: { ...rpgStats.mp, max: parseInt(e.target.value) || 1 } })}
+                    className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                  />
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-black/30">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all"
+                    style={{ width: `${Math.min(100, (rpgStats.mp.value / Math.max(1, rpgStats.mp.max)) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Attributes */}
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Attributes</h3>
+                <button
+                  onClick={addRpgAttribute}
+                  className="flex items-center gap-1 rounded-lg bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-purple-400 transition-colors hover:bg-purple-500/25"
+                >
+                  <Plus size={12} />
+                  Add
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {rpgStats.attributes.map((attr, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2"
+                  >
+                    <input
+                      value={attr.name}
+                      onChange={(e) => updateRpgAttribute(i, "name", e.target.value)}
+                      className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-xs font-medium"
+                      placeholder="Name"
+                    />
+                    <input
+                      type="number"
+                      value={attr.value}
+                      onChange={(e) => updateRpgAttribute(i, "value", parseInt(e.target.value) || 0)}
+                      className="w-16 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-center text-xs"
+                    />
+                    <span className="text-[10px] text-[var(--muted-foreground)]">/</span>
+                    <input
+                      type="number"
+                      value={attr.max}
+                      onChange={(e) => updateRpgAttribute(i, "max", parseInt(e.target.value) || 1)}
+                      className="w-16 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-center text-xs"
+                    />
+                    <div className="flex-1 h-1.5 overflow-hidden rounded-full bg-black/30">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all"
+                        style={{ width: `${Math.min(100, (attr.value / Math.max(1, attr.max)) * 100)}%` }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => removeRpgAttribute(i)}
+                      className="rounded-lg p-1 text-[var(--muted-foreground)] transition-colors hover:bg-red-500/15 hover:text-red-400"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Info */}
+            <div className="mt-4 rounded-xl bg-[var(--card)] p-4 ring-1 ring-[var(--border)]">
+              <h4 className="mb-1.5 text-xs font-semibold">How RPG attributes work</h4>
+              <ul className="space-y-1 text-[11px] text-[var(--muted-foreground)]">
+                <li>
+                  &bull; <strong className="text-[var(--foreground)]">HP &amp; MP</strong> — Injected into the prompt so
+                  the AI knows your persona&apos;s current health and mana.
+                </li>
+                <li>
+                  &bull; <strong className="text-[var(--foreground)]">Attributes</strong> — Custom stats (STR, DEX,
+                  etc.) that define your persona&apos;s capabilities.
+                </li>
+                <li>
+                  &bull; The Character Tracker agent adjusts these values based on narrative events (combat, healing,
+                  etc.).
+                </li>
+                <li>&bull; Values set here serve as the initial/default state for new conversations.</li>
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ──────────────────────────────────────────────
 // Sub-components
 // ──────────────────────────────────────────────
@@ -457,9 +853,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
   return (
     <div className="mb-4">
       <h3 className="text-sm font-semibold">{title}</h3>
-      {subtitle && (
-        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{subtitle}</p>
-      )}
+      {subtitle && <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{subtitle}</p>}
     </div>
   );
 }
@@ -489,9 +883,7 @@ function TextareaTab({
         rows={rows}
         className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-4 text-sm leading-relaxed outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-emerald-400/40 focus:ring-1 focus:ring-emerald-400/20"
       />
-      <p className="mt-1.5 text-right text-[10px] text-[var(--muted-foreground)]">
-        {value.length} characters
-      </p>
+      <p className="mt-1.5 text-right text-[10px] text-[var(--muted-foreground)]">{value.length} characters</p>
     </div>
   );
 }

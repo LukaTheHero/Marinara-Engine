@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import type { FastifyInstance } from "fastify";
 import { createCharacterSchema, createGroupSchema, updateGroupSchema } from "@rpg-engine/shared";
+import type { ExportEnvelope } from "@rpg-engine/shared";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
@@ -39,6 +40,26 @@ export async function charactersRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/:id", async (req, reply) => {
     await storage.remove(req.params.id);
     return reply.status(204).send();
+  });
+
+  // ── Export ──
+
+  app.get<{ Params: { id: string } }>("/:id/export", async (req, reply) => {
+    const char = await storage.getById(req.params.id);
+    if (!char) return reply.status(404).send({ error: "Character not found" });
+    const charData = JSON.parse(char.data);
+    const envelope: ExportEnvelope = {
+      type: "marinara_character",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: { spec: "chara_card_v2", spec_version: "2.0", data: charData },
+    };
+    return reply
+      .header(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(charData.name || "character")}.marinara.json"`,
+      )
+      .send(envelope);
   });
 
   // ── Avatar Upload ──
@@ -118,6 +139,33 @@ export async function charactersRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/personas/:id", async (req, reply) => {
     await storage.removePersona(req.params.id);
     return reply.status(204).send();
+  });
+
+  // ── Persona Export ──
+
+  app.get<{ Params: { id: string } }>("/personas/:id/export", async (req, reply) => {
+    const persona = await storage.getPersona(req.params.id);
+    if (!persona) return reply.status(404).send({ error: "Persona not found" });
+    const {
+      id: _id,
+      createdAt: _c,
+      updatedAt: _u,
+      avatarPath: _a,
+      isActive: _ia,
+      ...personaData
+    } = persona as Record<string, unknown>;
+    const envelope: ExportEnvelope = {
+      type: "marinara_persona",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: personaData,
+    };
+    return reply
+      .header(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(String(persona.name || "persona"))}.marinara.json"`,
+      )
+      .send(envelope);
   });
 
   // ── Character Groups ──

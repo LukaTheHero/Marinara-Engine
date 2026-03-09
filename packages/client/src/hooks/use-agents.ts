@@ -27,6 +27,7 @@ export function useAgentConfigs() {
   return useQuery({
     queryKey: agentKeys.all,
     queryFn: () => api.get<AgentConfigRow[]>("/agents"),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -35,14 +36,14 @@ export function useAgentConfig(id: string | null) {
     queryKey: agentKeys.detail(id ?? ""),
     queryFn: () => api.get<AgentConfigRow>(`/agents/${id}`),
     enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }
 
 export function useUpdateAgent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
-      api.patch(`/agents/${id}`, data),
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => api.patch(`/agents/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: agentKeys.all });
     },

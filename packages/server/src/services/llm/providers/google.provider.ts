@@ -1,16 +1,13 @@
 // ──────────────────────────────────────────────
 // LLM Provider — Google Gemini
 // ──────────────────────────────────────────────
-import { BaseLLMProvider, type ChatMessage, type ChatOptions } from "../base-provider.js";
+import { BaseLLMProvider, type ChatMessage, type ChatOptions, type LLMUsage } from "../base-provider.js";
 
 /**
  * Handles Google Gemini API (generateContent / streamGenerateContent).
  */
 export class GoogleProvider extends BaseLLMProvider {
-  async *chat(
-    messages: ChatMessage[],
-    options: ChatOptions,
-  ): AsyncGenerator<string, void, unknown> {
+  async *chat(messages: ChatMessage[], options: ChatOptions): AsyncGenerator<string, LLMUsage | void, unknown> {
     const model = options.model || "gemini-2.0-flash";
     const endpoint = options.stream ? "streamGenerateContent" : "generateContent";
     const url = `${this.baseUrl}/models/${model}:${endpoint}?key=${this.apiKey}${options.stream ? "&alt=sse" : ""}`;
@@ -53,10 +50,25 @@ export class GoogleProvider extends BaseLLMProvider {
     if (!options.stream) {
       const json = (await response.json()) as {
         candidates: Array<{
-          content: { parts: Array<{ text: string }> };
+          content: { parts: Array<{ text?: string; thought?: boolean }> };
         }>;
+        usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number };
       };
-      yield json.candidates[0]?.content?.parts[0]?.text ?? "";
+      const parts = json.candidates[0]?.content?.parts ?? [];
+      for (const part of parts) {
+        if (part.thought && part.text && options.onThinking) {
+          options.onThinking(part.text);
+        } else if (part.text && !part.thought) {
+          yield part.text;
+        }
+      }
+      if (json.usageMetadata) {
+        return {
+          promptTokens: json.usageMetadata.promptTokenCount,
+          completionTokens: json.usageMetadata.candidatesTokenCount,
+          totalTokens: json.usageMetadata.totalTokenCount,
+        };
+      }
       return;
     }
 
@@ -66,6 +78,7 @@ export class GoogleProvider extends BaseLLMProvider {
 
     const decoder = new TextDecoder();
     let buffer = "";
+    let streamUsage: LLMUsage | undefined;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -83,15 +96,30 @@ export class GoogleProvider extends BaseLLMProvider {
         try {
           const parsed = JSON.parse(data) as {
             candidates?: Array<{
-              content?: { parts?: Array<{ text?: string }> };
+              content?: { parts?: Array<{ text?: string; thought?: boolean }> };
             }>;
+            usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number };
           };
-          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) yield text;
+          if (parsed.usageMetadata) {
+            streamUsage = {
+              promptTokens: parsed.usageMetadata.promptTokenCount,
+              completionTokens: parsed.usageMetadata.candidatesTokenCount,
+              totalTokens: parsed.usageMetadata.totalTokenCount,
+            };
+          }
+          const parts = parsed.candidates?.[0]?.content?.parts ?? [];
+          for (const part of parts) {
+            if (part.thought && part.text && options.onThinking) {
+              options.onThinking(part.text);
+            } else if (part.text && !part.thought) {
+              yield part.text;
+            }
+          }
         } catch {
           // Skip malformed lines
         }
       }
     }
+    if (streamUsage) return streamUsage;
   }
 }

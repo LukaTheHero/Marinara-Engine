@@ -114,10 +114,7 @@ export function injectAtDepth(
  * Trims entries (by priority/order) until total tokens are within budget.
  * Uses a rough estimate of 4 characters per token.
  */
-export function applyTokenBudget(
-  activatedEntries: ActivatedEntry[],
-  tokenBudget: number,
-): ActivatedEntry[] {
+export function applyTokenBudget(activatedEntries: ActivatedEntry[], tokenBudget: number): ActivatedEntry[] {
   if (tokenBudget <= 0) return activatedEntries;
 
   const CHARS_PER_TOKEN = 4;

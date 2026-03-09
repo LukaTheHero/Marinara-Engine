@@ -126,10 +126,7 @@ function testSecondaryKeys(
 /**
  * Evaluate activation conditions against game state.
  */
-export function evaluateConditions(
-  conditions: ActivationCondition[],
-  gameState: GameStateForScanning | null,
-): boolean {
+export function evaluateConditions(conditions: ActivationCondition[], gameState: GameStateForScanning | null): boolean {
   if (conditions.length === 0) return true;
   if (!gameState) return true; // No game state = conditions pass (permissive)
 
@@ -164,10 +161,7 @@ export function evaluateConditions(
 /**
  * Evaluate schedule conditions against game state.
  */
-function evaluateSchedule(
-  schedule: LorebookSchedule | null,
-  gameState: GameStateForScanning | null,
-): boolean {
+function evaluateSchedule(schedule: LorebookSchedule | null, gameState: GameStateForScanning | null): boolean {
   if (!schedule) return true;
   if (!gameState) return true;
 
@@ -276,12 +270,7 @@ export function scanForActivatedEntries(
   entries: LorebookEntry[],
   options: ScanOptions = {},
 ): ActivatedEntry[] {
-  const {
-    scanDepth = 0,
-    gameState = null,
-    timingStates = new Map(),
-    currentMessageIndex = messages.length,
-  } = options;
+  const { scanDepth = 0, gameState = null, timingStates = new Map(), currentMessageIndex = messages.length } = options;
 
   // Build the text to scan from recent messages
   const messagesToScan = scanDepth > 0 ? messages.slice(-scanDepth) : messages;

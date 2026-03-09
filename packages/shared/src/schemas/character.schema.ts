@@ -9,14 +9,16 @@ export const depthPromptSchema = z.object({
   role: z.enum(["system", "user", "assistant"]).default("system"),
 });
 
-export const characterExtensionsSchema = z.object({
-  talkativeness: z.number().min(0).max(1).default(0.5),
-  fav: z.boolean().default(false),
-  world: z.string().default(""),
-  depth_prompt: depthPromptSchema.default({}),
-  backstory: z.string().default(""),
-  appearance: z.string().default(""),
-}).passthrough();
+export const characterExtensionsSchema = z
+  .object({
+    talkativeness: z.number().min(0).max(1).default(0.5),
+    fav: z.boolean().default(false),
+    world: z.string().default(""),
+    depth_prompt: depthPromptSchema.default({}),
+    backstory: z.string().default(""),
+    appearance: z.string().default(""),
+  })
+  .passthrough();
 
 export const characterBookEntrySchema = z.object({
   keys: z.array(z.string()),

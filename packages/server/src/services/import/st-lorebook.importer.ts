@@ -41,23 +41,82 @@ interface STWorldInfo {
 
 const CATEGORY_SIGNALS: Record<LorebookCategory, string[]> = {
   world: [
-    "world", "realm", "kingdom", "empire", "continent", "geography", "climate",
-    "history", "era", "age", "calendar", "religion", "magic system", "faction",
-    "political", "economy", "trade", "war", "alliance", "treaty", "culture",
+    "world",
+    "realm",
+    "kingdom",
+    "empire",
+    "continent",
+    "geography",
+    "climate",
+    "history",
+    "era",
+    "age",
+    "calendar",
+    "religion",
+    "magic system",
+    "faction",
+    "political",
+    "economy",
+    "trade",
+    "war",
+    "alliance",
+    "treaty",
+    "culture",
   ],
   character: [
-    "personality", "backstory", "motivation", "goal", "fear", "trait",
-    "relationship", "family", "appearance", "outfit", "skill", "ability",
-    "power", "weakness", "likes", "dislikes", "occupation", "class",
+    "personality",
+    "backstory",
+    "motivation",
+    "goal",
+    "fear",
+    "trait",
+    "relationship",
+    "family",
+    "appearance",
+    "outfit",
+    "skill",
+    "ability",
+    "power",
+    "weakness",
+    "likes",
+    "dislikes",
+    "occupation",
+    "class",
   ],
   npc: [
-    "shopkeeper", "innkeeper", "guard", "merchant", "villager", "bartender",
-    "noble", "servant", "priest", "soldier", "bandit", "traveler", "stranger",
-    "quest giver", "companion", "ally", "enemy", "rival", "mentor",
+    "shopkeeper",
+    "innkeeper",
+    "guard",
+    "merchant",
+    "villager",
+    "bartender",
+    "noble",
+    "servant",
+    "priest",
+    "soldier",
+    "bandit",
+    "traveler",
+    "stranger",
+    "quest giver",
+    "companion",
+    "ally",
+    "enemy",
+    "rival",
+    "mentor",
   ],
   summary: [
-    "summary", "recap", "previously", "so far", "chapter", "session",
-    "overview", "plot", "arc", "event", "happened", "timeline",
+    "summary",
+    "recap",
+    "previously",
+    "so far",
+    "chapter",
+    "session",
+    "overview",
+    "plot",
+    "arc",
+    "event",
+    "happened",
+    "timeline",
   ],
   uncategorized: [],
 };
@@ -72,14 +131,9 @@ function detectCategory(entries: STWorldInfoEntry[], name?: string): LorebookCat
   };
 
   // Build a single text blob for analysis
-  const allText = [
-    name ?? "",
-    ...entries.map((e) => [
-      e.comment ?? "",
-      e.content ?? "",
-      ...(e.key ?? []),
-    ].join(" ")),
-  ].join(" ").toLowerCase();
+  const allText = [name ?? "", ...entries.map((e) => [e.comment ?? "", e.content ?? "", ...(e.key ?? [])].join(" "))]
+    .join(" ")
+    .toLowerCase();
 
   for (const [cat, signals] of Object.entries(CATEGORY_SIGNALS) as [LorebookCategory, string[]][]) {
     for (const signal of signals) {
@@ -109,7 +163,21 @@ function detectCategory(entries: STWorldInfoEntry[], name?: string): LorebookCat
 function detectEntryTag(entry: STWorldInfoEntry): string {
   const text = [entry.comment ?? "", entry.content ?? "", ...(entry.key ?? [])].join(" ").toLowerCase();
   const tagSignals: Record<string, string[]> = {
-    location: ["city", "town", "village", "forest", "mountain", "river", "cave", "dungeon", "castle", "tower", "temple", "tavern", "inn"],
+    location: [
+      "city",
+      "town",
+      "village",
+      "forest",
+      "mountain",
+      "river",
+      "cave",
+      "dungeon",
+      "castle",
+      "tower",
+      "temple",
+      "tavern",
+      "inn",
+    ],
     character: ["personality", "backstory", "appearance", "motivation", "fear", "goal", "trait"],
     item: ["sword", "potion", "artifact", "weapon", "armor", "ring", "amulet", "scroll", "tome"],
     faction: ["guild", "order", "alliance", "faction", "clan", "tribe", "house", "court"],
@@ -140,7 +208,7 @@ function detectEntryTag(entry: STWorldInfoEntry): string {
 export async function importSTLorebook(
   raw: Record<string, unknown>,
   db: DB,
-  options?: { characterId?: string; namePrefix?: string },
+  options?: { characterId?: string; namePrefix?: string; fallbackName?: string },
 ) {
   const storage = createLorebooksStorage(db);
   const wi = raw as unknown as STWorldInfo;
@@ -150,10 +218,10 @@ export async function importSTLorebook(
 
   const lbName = options?.namePrefix
     ? `${options.namePrefix} — ${wi.name ?? "Lorebook"}`
-    : wi.name ?? "Imported Lorebook";
+    : (wi.name ?? options?.fallbackName ?? "Imported Lorebook");
 
   // Create the lorebook
-  const lorebook = await storage.create({
+  const lorebook = (await storage.create({
     name: lbName,
     description: "Imported from SillyTavern",
     category: detectedCategory,
@@ -162,7 +230,7 @@ export async function importSTLorebook(
     recursiveScanning: false,
     generatedBy: "import",
     characterId: options?.characterId ?? null,
-  }) as Record<string, unknown> | null;
+  })) as Record<string, unknown> | null;
 
   if (!lorebook) return { error: "Failed to create lorebook" };
 

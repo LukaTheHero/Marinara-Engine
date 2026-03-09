@@ -51,8 +51,7 @@ export function useCreateCustomTool() {
 export function useUpdateCustomTool() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
-      api.patch(`/custom-tools/${id}`, data),
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => api.patch(`/custom-tools/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: toolKeys.all });
     },

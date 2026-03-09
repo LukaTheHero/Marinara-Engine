@@ -2,7 +2,7 @@
 // Full-Page Preset Editor
 // Tabs: Overview · Sections · Parameters · Review
 // ──────────────────────────────────────────────
-import { useState, useCallback, useEffect, useMemo, type FC } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, type FC } from "react";
 import { useUIStore } from "../../stores/ui.store";
 import {
   usePresetFull,
@@ -15,9 +15,10 @@ import {
   useCreateGroup,
   useUpdateGroup,
   useDeleteGroup,
-  useCreateChoice,
-  useUpdateChoice,
-  useDeleteChoice,
+  useCreateVariable,
+  useUpdateVariable,
+  useDeleteVariable,
+  useReorderVariables,
 } from "../../hooks/use-presets";
 import {
   ArrowLeft,
@@ -33,6 +34,7 @@ import {
   ChevronRight,
   Code2,
   Hash,
+  Type,
   Eye,
   EyeOff,
   FolderOpen,
@@ -41,16 +43,32 @@ import {
   Bot,
   Copy,
   X,
+  Maximize2,
+  BookOpen,
+  ListChecks,
+  Shuffle,
+  Download,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
-import type {
-  PromptSection,
-  PromptGroup,
-  ChoiceBlock,
-  WrapFormat,
-  MarkerType,
-} from "@rpg-engine/shared";
+import { api } from "../../lib/api-client";
+import { useAgentConfigs, type AgentConfigRow } from "../../hooks/use-agents";
+import type { PromptSection, PromptGroup, ChoiceBlock, WrapFormat, MarkerType } from "@rpg-engine/shared";
+
+/** Intercept Tab in a textarea to insert 2 spaces instead of changing focus. */
+function handleTextareaTab(e: React.KeyboardEvent<HTMLTextAreaElement>, value: string, setValue: (v: string) => void) {
+  if (e.key !== "Tab") return;
+  e.preventDefault();
+  const ta = e.currentTarget;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  const newValue = value.substring(0, start) + "  " + value.substring(end);
+  setValue(newValue);
+  // Restore cursor position after React re-renders
+  requestAnimationFrame(() => {
+    ta.selectionStart = ta.selectionEnd = start + 2;
+  });
+}
 
 // ── Tab definitions ──
 
@@ -79,9 +97,11 @@ const MARKER_LABELS: Record<MarkerType, string> = {
   lorebook: "Lorebook (All)",
   persona: "Persona",
   chat_history: "Chat History",
+  chat_summary: "Chat Summary",
   world_info_before: "World Info (Before)",
   world_info_after: "World Info (After)",
   dialogue_examples: "Dialogue Examples",
+  agent_data: "Agent Data",
 };
 
 // ═══════════════════════════════════════════════
@@ -102,13 +122,15 @@ export function PresetEditor() {
   const createGroup = useCreateGroup();
   const updateGroup = useUpdateGroup();
   const deleteGroup = useDeleteGroup();
-  const createChoice = useCreateChoice();
-  const updateChoice = useUpdateChoice();
-  const deleteChoice = useDeleteChoice();
+  const createVariable = useCreateVariable();
+  const updateVariable = useUpdateVariable();
+  const deleteVariable = useDeleteVariable();
+  const reorderVariables = useReorderVariables();
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [dirty, setDirty] = useState(false);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
 
   // Local editable state
   const [localName, setLocalName] = useState("");
@@ -126,7 +148,7 @@ export function PresetEditor() {
     setLocalWrapFormat((p.wrapFormat ?? "xml") as WrapFormat);
     setLocalAuthor(p.author ?? "");
     try {
-      setLocalParams(typeof p.parameters === "string" ? JSON.parse(p.parameters) : p.parameters ?? {});
+      setLocalParams(typeof p.parameters === "string" ? JSON.parse(p.parameters) : (p.parameters ?? {}));
     } catch {
       setLocalParams({});
     }
@@ -151,7 +173,13 @@ export function PresetEditor() {
         author: localAuthor,
         parameters: localParams,
       },
-      { onSuccess: () => setDirty(false) },
+      {
+        onSuccess: () => {
+          setDirty(false);
+          setShowSaved(true);
+          setTimeout(() => setShowSaved(false), 1500);
+        },
+      },
     );
   }, [presetDetailId, localName, localDescription, localWrapFormat, localAuthor, localParams, updatePreset]);
 
@@ -168,7 +196,7 @@ export function PresetEditor() {
     if (!data?.preset) return [];
     const p = data.preset as any;
     try {
-      return typeof p.sectionOrder === "string" ? JSON.parse(p.sectionOrder) : p.sectionOrder ?? [];
+      return typeof p.sectionOrder === "string" ? JSON.parse(p.sectionOrder) : (p.sectionOrder ?? []);
     } catch {
       return [];
     }
@@ -185,9 +213,9 @@ export function PresetEditor() {
     return new Map((data.groups as any[]).map((g) => [g.id, g]));
   }, [data?.groups]);
 
-  const choiceMap = useMemo(() => {
-    if (!data?.choiceBlocks) return new Map<string, any>();
-    return new Map((data.choiceBlocks as any[]).map((c) => [c.sectionId, c]));
+  const choiceBlocks = useMemo(() => {
+    if (!data?.choiceBlocks) return [] as any[];
+    return data.choiceBlocks as any[];
   }, [data?.choiceBlocks]);
 
   if (!presetDetailId) return null;
@@ -226,6 +254,7 @@ export function PresetEditor() {
         </div>
         <input
           value={localName}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => {
             setLocalName(e.target.value);
             markDirty();
@@ -242,6 +271,13 @@ export function PresetEditor() {
             <Save size={13} /> Save
           </button>
           <button
+            onClick={() => api.download(`/prompts/${presetDetailId}/export`)}
+            className="rounded-xl p-2 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            title="Export preset"
+          >
+            <Download size={15} />
+          </button>
+          <button
             onClick={handleDelete}
             className="rounded-xl p-2 transition-all hover:bg-[var(--destructive)]/15 active:scale-95"
           >
@@ -249,6 +285,13 @@ export function PresetEditor() {
           </button>
         </div>
       </div>
+
+      {/* Saved toast */}
+      {showSaved && (
+        <div className="absolute left-1/2 top-14 z-50 -translate-x-1/2 animate-fade-in-up rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-400 shadow-lg backdrop-blur-sm">
+          Changes saved
+        </div>
+      )}
 
       {/* Unsaved warning */}
       {showUnsavedWarning && (
@@ -336,7 +379,7 @@ export function PresetEditor() {
                 presetId={presetDetailId}
                 sections={orderedSections}
                 groupMap={groupMap}
-                choiceMap={choiceMap}
+                choiceBlocks={choiceBlocks}
                 wrapFormat={localWrapFormat}
                 onCreateSection={createSection}
                 onUpdateSection={updateSection}
@@ -345,9 +388,10 @@ export function PresetEditor() {
                 onCreateGroup={createGroup}
                 onUpdateGroup={updateGroup}
                 onDeleteGroup={deleteGroup}
-                onCreateChoice={createChoice}
-                onUpdateChoice={updateChoice}
-                onDeleteChoice={deleteChoice}
+                onCreateVariable={createVariable}
+                onUpdateVariable={updateVariable}
+                onDeleteVariable={deleteVariable}
+                onReorderVariables={reorderVariables}
               />
             )}
 
@@ -363,9 +407,7 @@ export function PresetEditor() {
             )}
 
             {/* ── Review Tab ── */}
-            {activeTab === "review" && (
-              <ReviewTab presetId={presetDetailId} />
-            )}
+            {activeTab === "review" && <ReviewTab presetId={presetDetailId} />}
           </div>
         </div>
       </div>
@@ -398,18 +440,25 @@ function OverviewTab({
 }) {
   return (
     <>
-      <FieldGroup label="Description" help="A short summary of what this preset is designed for. Helps you remember its purpose when choosing between presets.">
+      <FieldGroup
+        label="Description"
+        help="A short summary of what this preset is designed for. Helps you remember its purpose when choosing between presets."
+      >
         <textarea
           value={description}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="What does this preset do?"
           className="min-h-[80px] w-full rounded-xl bg-[var(--secondary)] p-3 text-sm text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
         />
       </FieldGroup>
 
-      <FieldGroup label="Wrap Format" help="Controls how prompt sections are formatted when sent to the AI. XML uses <tags>, Markdown uses ## headings. Most models work well with either.">
+      <FieldGroup
+        label="Wrap Format"
+        help="Controls how prompt sections are formatted when sent to the AI. XML uses <tags>, Markdown uses ## headings, None sends raw content."
+      >
         <div className="flex gap-2">
-          {(["xml", "markdown"] as const).map((fmt) => (
+          {(["xml", "markdown", "none"] as const).map((fmt) => (
             <button
               key={fmt}
               onClick={() => onWrapFormatChange(fmt)}
@@ -420,7 +469,7 @@ function OverviewTab({
                   : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]",
               )}
             >
-              {fmt === "xml" ? <Code2 size={14} /> : <Hash size={14} />}
+              {fmt === "xml" ? <Code2 size={14} /> : fmt === "markdown" ? <Hash size={14} /> : <Type size={14} />}
               {fmt.toUpperCase()}
             </button>
           ))}
@@ -428,13 +477,16 @@ function OverviewTab({
         <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
           {wrapFormat === "xml"
             ? "Sections wrapped in <xml_tags>. Groups become parent tags."
-            : "Sections wrapped with ## Headings. Groups become # Headings."}
+            : wrapFormat === "markdown"
+              ? "Sections wrapped with ## Headings. Groups become # Headings."
+              : "No automatic wrapping. Section content is sent as-is."}
         </p>
       </FieldGroup>
 
       <FieldGroup label="Author" help="Optional creator name, useful if you share presets with others.">
         <input
           value={author}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => onAuthorChange(e.target.value)}
           placeholder="Your name (optional)"
           className="w-full rounded-xl bg-[var(--secondary)] p-2.5 text-sm text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
@@ -457,7 +509,7 @@ function SectionsTab({
   presetId,
   sections,
   groupMap,
-  choiceMap,
+  choiceBlocks,
   wrapFormat,
   onCreateSection,
   onUpdateSection,
@@ -466,14 +518,15 @@ function SectionsTab({
   onCreateGroup,
   onUpdateGroup,
   onDeleteGroup,
-  onCreateChoice,
-  onUpdateChoice,
-  onDeleteChoice,
+  onCreateVariable,
+  onUpdateVariable,
+  onDeleteVariable,
+  onReorderVariables,
 }: {
   presetId: string;
   sections: any[];
   groupMap: Map<string, any>;
-  choiceMap: Map<string, any>;
+  choiceBlocks: any[];
   wrapFormat: WrapFormat;
   onCreateSection: any;
   onUpdateSection: any;
@@ -482,17 +535,28 @@ function SectionsTab({
   onCreateGroup: any;
   onUpdateGroup: any;
   onDeleteGroup: any;
-  onCreateChoice: any;
-  onUpdateChoice: any;
-  onDeleteChoice: any;
+  onCreateVariable: any;
+  onUpdateVariable: any;
+  onDeleteVariable: any;
+  onReorderVariables: any;
 }) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showGroupsPanel, setShowGroupsPanel] = useState(false);
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [dragReady, setDragReady] = useState<number | null>(null); // index of section ready to drag (grip held)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingGroupName, setEditingGroupName] = useState("");
+
+  // Fetch agent configs and filter to those with injectAsSection enabled
+  const { data: agentConfigs } = useAgentConfigs();
+  const injectableAgents = useMemo(() => {
+    if (!agentConfigs) return [];
+    return (agentConfigs as AgentConfigRow[]).filter((a) => {
+      const settings = typeof a.settings === "string" ? JSON.parse(a.settings) : a.settings;
+      return settings?.injectAsSection === true;
+    });
+  }, [agentConfigs]);
 
   const toggleExpanded = (id: string) => {
     setExpandedSections((prev) => {
@@ -503,17 +567,35 @@ function SectionsTab({
     });
   };
 
-  const handleAddSection = (opts?: { isMarker?: boolean; markerType?: MarkerType }) => {
+  const handleAddSection = (opts?: {
+    isMarker?: boolean;
+    markerType?: MarkerType;
+    agentType?: string;
+    agentName?: string;
+  }) => {
     setShowAddMenu(false);
-    onCreateSection.mutate({
-      presetId,
-      identifier: opts?.isMarker ? opts.markerType : `section_${Date.now()}`,
-      name: opts?.isMarker ? MARKER_LABELS[opts.markerType!] : "New Section",
-      content: "",
-      role: "system",
-      isMarker: opts?.isMarker ?? false,
-      markerConfig: opts?.isMarker ? { type: opts.markerType! } : null,
-    });
+    if (opts?.agentType) {
+      // Agent data marker — pre-fill content with macro
+      onCreateSection.mutate({
+        presetId,
+        identifier: `agent_${opts.agentType}`,
+        name: `${opts.agentName ?? opts.agentType} (Agent)`,
+        content: `{{agent::${opts.agentType}}}`,
+        role: "system",
+        isMarker: true,
+        markerConfig: { type: "agent_data" as MarkerType, agentType: opts.agentType },
+      });
+    } else {
+      onCreateSection.mutate({
+        presetId,
+        identifier: opts?.isMarker ? opts.markerType : `section_${Date.now()}`,
+        name: opts?.isMarker ? MARKER_LABELS[opts.markerType!] : "New Section",
+        content: "",
+        role: "system",
+        isMarker: opts?.isMarker ?? false,
+        markerConfig: opts?.isMarker ? { type: opts.markerType! } : null,
+      });
+    }
   };
 
   const handleAddGroup = () => {
@@ -521,40 +603,66 @@ function SectionsTab({
   };
 
   // ── Drag & Drop ──
+  // dropIdx represents the *gap* the item will be inserted at:
+  //   0 = before first, 1 = between 0 and 1, N = after last, etc.
+  const [dropIdx, setDropIdx] = useState<number | null>(null);
+
   const handleDragStart = (idx: number, e: React.DragEvent) => {
     setDraggingIdx(idx);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", String(idx));
   };
 
-  const handleDragOver = (idx: number, e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverIdx(idx);
+  const calcDropIdx = (cardIdx: number, e: React.DragEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    return e.clientY < midY ? cardIdx : cardIdx + 1;
   };
 
-  const handleDrop = (targetIdx: number, e: React.DragEvent) => {
+  const handleDragOver = (cardIdx: number, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropIdx(calcDropIdx(cardIdx, e));
+  };
+
+  const handleContainerDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    // If dragging below all items, set drop to end
+    setDropIdx(sections.length);
+  };
+
+  const commitDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const sourceIdx = draggingIdx;
+    const target = dropIdx;
     setDraggingIdx(null);
-    setDragOverIdx(null);
-    if (sourceIdx === null || sourceIdx === targetIdx) return;
+    setDropIdx(null);
+    if (sourceIdx === null || target === null) return;
+    // Adjust for removal: if source is before target, target shifts down by 1
+    let insertAt = target;
+    if (sourceIdx < insertAt) insertAt--;
+    if (sourceIdx === insertAt) return;
 
     const ids = sections.map((s: any) => s.id);
     const [moved] = ids.splice(sourceIdx, 1);
-    ids.splice(targetIdx, 0, moved);
+    ids.splice(insertAt, 0, moved);
     onReorderSections.mutate({ presetId, sectionIds: ids });
   };
 
   const handleDragEnd = () => {
     setDraggingIdx(null);
-    setDragOverIdx(null);
+    setDropIdx(null);
   };
 
   return (
     <>
       {/* ── Toolbar ── */}
       <div className="flex items-center gap-2">
+        <HelpTooltip
+          text="Everything we send to a model is just text. A prompt is a formatted, written instruction we send to the model. Each section below becomes part of the final prompt."
+          side="right"
+        />
         <div className="relative">
           <button
             onClick={() => setShowAddMenu(!showAddMenu)}
@@ -566,7 +674,7 @@ function SectionsTab({
             <>
               {/* Backdrop to close menu */}
               <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
-              <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-xl">
+              <div className="absolute left-0 top-full z-50 mt-1 w-56 max-h-80 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-xl">
                 <button
                   onClick={() => handleAddSection()}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--accent)]"
@@ -575,15 +683,32 @@ function SectionsTab({
                 </button>
                 <div className="my-1 border-t border-[var(--border)]" />
                 <p className="px-3 py-1 text-[10px] font-medium text-[var(--muted-foreground)]">Markers</p>
-                {(Object.keys(MARKER_LABELS) as MarkerType[]).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => handleAddSection({ isMarker: true, markerType: type })}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--accent)]"
-                  >
-                    <Layers size={13} className="text-purple-400" /> {MARKER_LABELS[type]}
-                  </button>
-                ))}
+                {(Object.keys(MARKER_LABELS) as MarkerType[])
+                  .filter((t) => t !== "agent_data")
+                  .map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => handleAddSection({ isMarker: true, markerType: type })}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--accent)]"
+                    >
+                      <Layers size={13} className="text-purple-400" /> {MARKER_LABELS[type]}
+                    </button>
+                  ))}
+                {injectableAgents.length > 0 && (
+                  <>
+                    <div className="my-1 border-t border-[var(--border)]" />
+                    <p className="px-3 py-1 text-[10px] font-medium text-[var(--muted-foreground)]">Agent Sections</p>
+                    {injectableAgents.map((agent) => (
+                      <button
+                        key={agent.id}
+                        onClick={() => handleAddSection({ agentType: agent.type, agentName: agent.name })}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--accent)]"
+                      >
+                        <Sparkles size={13} className="text-[var(--y2k-pink)]" /> {agent.name} (Agent)
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             </>
           )}
@@ -623,7 +748,10 @@ function SectionsTab({
           ) : (
             <div className="space-y-1">
               {[...groupMap.values()].map((g: any) => (
-                <div key={g.id} className="flex items-center gap-2 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 ring-1 ring-[var(--border)]">
+                <div
+                  key={g.id}
+                  className="flex items-center gap-2 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 ring-1 ring-[var(--border)]"
+                >
                   {editingGroupId === g.id ? (
                     <input
                       value={editingGroupName}
@@ -674,7 +802,7 @@ function SectionsTab({
       )}
 
       {/* ── Section list with drag & drop ── */}
-      <div className="space-y-1">
+      <div className="space-y-1" onDragOver={handleContainerDragOver} onDrop={commitDrop}>
         {sections.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-10 text-center">
             <Layers size={24} className="text-[var(--muted-foreground)]" />
@@ -687,246 +815,265 @@ function SectionsTab({
             const isMarker = section.isMarker === "true" || section.isMarker === true;
             const role = (section.role ?? "system") as string;
             const group = section.groupId ? groupMap.get(section.groupId) : null;
-            const choice = choiceMap.get(section.id);
             const RoleIcon = ROLE_ICONS[role] ?? Settings2;
-            const isDragTarget = dragOverIdx === idx && draggingIdx !== idx;
+            // Show drop indicator line above this card when dropIdx matches
+            const showDropBefore =
+              dropIdx === idx && draggingIdx !== null && draggingIdx !== idx && draggingIdx !== idx - 1;
+            const showDropAfter =
+              idx === sections.length - 1 && dropIdx === sections.length && draggingIdx !== null && draggingIdx !== idx;
 
             return (
-              <div
-                key={section.id}
-                draggable
-                onDragStart={(e) => handleDragStart(idx, e)}
-                onDragOver={(e) => handleDragOver(idx, e)}
-                onDrop={(e) => handleDrop(idx, e)}
-                onDragEnd={handleDragEnd}
-                className={cn(
-                  "rounded-xl border transition-all",
-                  isEnabled ? "border-[var(--border)]" : "border-[var(--border)]/50 opacity-50",
-                  draggingIdx === idx && "opacity-40",
-                  isDragTarget && "ring-2 ring-purple-400/50 border-purple-400/30",
-                )}
-              >
-                {/* Section header */}
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <div
-                    className="cursor-grab shrink-0 rounded p-0.5 hover:bg-[var(--accent)] active:cursor-grabbing"
-                    title="Drag to reorder"
-                  >
-                    <GripVertical size={14} className="text-[var(--muted-foreground)]" />
-                  </div>
-                  <button
-                    onClick={() => toggleExpanded(section.id)}
-                    className="shrink-0 rounded p-0.5 hover:bg-[var(--accent)]"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown size={14} className="text-[var(--muted-foreground)]" />
-                    ) : (
-                      <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
-                    )}
-                  </button>
-                  <RoleIcon size={14} className={cn("shrink-0", ROLE_COLORS[role])} />
-                  <span
-                    className="min-w-0 flex-1 cursor-pointer truncate text-sm font-medium"
-                    onClick={() => toggleExpanded(section.id)}
-                  >
-                    {section.name}
-                  </span>
-
-                  {isMarker && (
-                    <span className="shrink-0 rounded bg-violet-400/15 px-1.5 py-0.5 text-[9px] font-medium text-violet-400">
-                      MARKER
-                    </span>
+              <div key={section.id}>
+                {showDropBefore && <div className="mx-2 mb-1 h-0.5 rounded-full bg-purple-400" />}
+                <div
+                  draggable={dragReady === idx}
+                  onDragStart={(e) => handleDragStart(idx, e)}
+                  onDragOver={(e) => {
+                    e.stopPropagation();
+                    handleDragOver(idx, e);
+                  }}
+                  onDrop={(e) => {
+                    e.stopPropagation();
+                    commitDrop(e);
+                  }}
+                  onDragEnd={() => {
+                    handleDragEnd();
+                    setDragReady(null);
+                  }}
+                  className={cn(
+                    "rounded-xl border transition-all",
+                    isEnabled ? "border-[var(--border)]" : "border-[var(--border)]/50 opacity-50",
+                    draggingIdx === idx && "opacity-40",
                   )}
-                  {choice && (
-                    <span className="shrink-0 rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
-                      CHOICE
-                    </span>
-                  )}
-                  {group && (
-                    <span className="shrink-0 rounded bg-sky-400/15 px-1.5 py-0.5 text-[9px] font-medium text-sky-400">
-                      {group.name}
-                    </span>
-                  )}
-                  <span className="shrink-0 text-[10px] text-[var(--muted-foreground)]">
-                    {role}
-                  </span>
-
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <button
-                      onClick={() =>
-                        onUpdateSection.mutate({
-                          presetId,
-                          sectionId: section.id,
-                          enabled: !isEnabled,
-                        })
-                      }
-                      className="rounded-lg p-1 hover:bg-[var(--accent)]"
-                      title={isEnabled ? "Disable" : "Enable"}
+                >
+                  {/* Section header */}
+                  <div className="flex items-center gap-2 px-3 py-2.5">
+                    <div
+                      className="cursor-grab shrink-0 rounded p-0.5 hover:bg-[var(--accent)] active:cursor-grabbing"
+                      title="Drag to reorder"
+                      onMouseDown={() => setDragReady(idx)}
+                      onMouseUp={() => setDragReady(null)}
                     >
-                      {isEnabled ? (
-                        <Eye size={12} className="text-green-400" />
+                      <GripVertical size={14} className="text-[var(--muted-foreground)]" />
+                    </div>
+                    <button
+                      onClick={() => toggleExpanded(section.id)}
+                      className="shrink-0 rounded p-0.5 hover:bg-[var(--accent)]"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown size={14} className="text-[var(--muted-foreground)]" />
                       ) : (
-                        <EyeOff size={12} className="text-[var(--muted-foreground)]" />
+                        <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
                       )}
                     </button>
-                    <button
-                      onClick={() =>
-                        onDeleteSection.mutate({ presetId, sectionId: section.id })
-                      }
-                      className="rounded-lg p-1 hover:bg-[var(--destructive)]/15"
-                      title="Delete"
+                    <RoleIcon size={14} className={cn("shrink-0", ROLE_COLORS[role])} />
+                    <span
+                      className="min-w-0 flex-1 cursor-pointer truncate text-sm font-medium"
+                      onClick={() => toggleExpanded(section.id)}
                     >
-                      <Trash2 size={12} className="text-[var(--destructive)]" />
-                    </button>
-                  </div>
-                </div>
+                      {section.name}
+                    </span>
 
-                {/* Expanded content */}
-                {isExpanded && (
-                  <div className="space-y-3 border-t border-[var(--border)] px-3 py-3">
-                    {/* Name & Role */}
-                    <div className="flex gap-2">
-                      <input
-                        value={section.name}
-                        onChange={(e) =>
-                          onUpdateSection.mutate({
-                            presetId,
-                            sectionId: section.id,
-                            name: e.target.value,
-                          })
-                        }
-                        className="flex-1 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                        placeholder="Section name"
-                      />
-                      <select
-                        value={role}
-                        onChange={(e) =>
-                          onUpdateSection.mutate({
-                            presetId,
-                            sectionId: section.id,
-                            role: e.target.value,
-                          })
-                        }
-                        className="rounded-lg bg-[var(--secondary)] px-2 py-1.5 text-xs ring-1 ring-[var(--border)] focus:outline-none"
-                      >
-                        <option value="system">System</option>
-                        <option value="user">User</option>
-                        <option value="assistant">Assistant</option>
-                      </select>
-                    </div>
-
-                    {/* Content (not for markers) */}
-                    {!isMarker && (
-                      <textarea
-                        value={section.content}
-                        onChange={(e) =>
-                          onUpdateSection.mutate({
-                            presetId,
-                            sectionId: section.id,
-                            content: e.target.value,
-                          })
-                        }
-                        className="min-h-[120px] w-full rounded-lg bg-[var(--secondary)] p-2.5 font-mono text-xs text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                        placeholder="Prompt content… (supports {{user}}, {{char}}, {{getvar::name}} macros)"
-                      />
+                    {isMarker && (
+                      <span className="shrink-0 rounded bg-violet-400/15 px-1.5 py-0.5 text-[9px] font-medium text-violet-400">
+                        MARKER
+                      </span>
                     )}
+                    {group && (
+                      <span className="shrink-0 rounded bg-sky-400/15 px-1.5 py-0.5 text-[9px] font-medium text-sky-400">
+                        {group.name}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-[10px] text-[var(--muted-foreground)]">{role}</span>
 
-                    {/* Marker config */}
-                    {isMarker && section.markerConfig && (
-                      <div className="rounded-lg bg-violet-400/5 p-3 text-xs text-violet-300">
-                        Marker type:{" "}
-                        <strong>
-                          {MARKER_LABELS[
-                            (typeof section.markerConfig === "string"
-                              ? JSON.parse(section.markerConfig)
-                              : section.markerConfig
-                            ).type as MarkerType
-                          ] ?? "Unknown"}
-                        </strong>
-                        <p className="mt-1 text-[var(--muted-foreground)]">
-                          Content is auto-generated at assembly time from your characters, lorebook, etc.
-                        </p>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        onClick={() =>
+                          onUpdateSection.mutate({
+                            presetId,
+                            sectionId: section.id,
+                            enabled: !isEnabled,
+                          })
+                        }
+                        className="rounded-lg p-1 hover:bg-[var(--accent)]"
+                        title={isEnabled ? "Disable" : "Enable"}
+                      >
+                        {isEnabled ? (
+                          <Eye size={12} className="text-green-400" />
+                        ) : (
+                          <EyeOff size={12} className="text-[var(--muted-foreground)]" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => onDeleteSection.mutate({ presetId, sectionId: section.id })}
+                        className="rounded-lg p-1 hover:bg-[var(--destructive)]/15"
+                        title="Delete"
+                      >
+                        <Trash2 size={12} className="text-[var(--destructive)]" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded content */}
+                  {isExpanded && (
+                    <div className="space-y-3 border-t border-[var(--border)] px-3 py-3">
+                      {/* Name & Role */}
+                      <div className="flex gap-2">
+                        <SectionNameInput
+                          value={section.name}
+                          onCommit={(name) =>
+                            onUpdateSection.mutate({
+                              presetId,
+                              sectionId: section.id,
+                              name,
+                            })
+                          }
+                        />
+                        <select
+                          value={role}
+                          onChange={(e) =>
+                            onUpdateSection.mutate({
+                              presetId,
+                              sectionId: section.id,
+                              role: e.target.value,
+                            })
+                          }
+                          className="rounded-lg bg-[var(--secondary)] px-2 py-1.5 text-xs ring-1 ring-[var(--border)] focus:outline-none"
+                        >
+                          <option value="system">System</option>
+                          <option value="user">User</option>
+                          <option value="assistant">Assistant</option>
+                        </select>
                       </div>
-                    )}
 
-                    {/* Position & Depth */}
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <label className="text-[var(--muted-foreground)]">Position:</label>
-                      <select
-                        value={section.injectionPosition ?? "ordered"}
-                        onChange={(e) =>
-                          onUpdateSection.mutate({
-                            presetId,
-                            sectionId: section.id,
-                            injectionPosition: e.target.value,
-                          })
-                        }
-                        className="rounded-lg bg-[var(--secondary)] px-2 py-1 text-xs ring-1 ring-[var(--border)]"
-                      >
-                        <option value="ordered">Ordered (in sequence)</option>
-                        <option value="depth">Depth (from end of chat)</option>
-                      </select>
-                      {section.injectionPosition === "depth" && (
-                        <>
-                          <label className="text-[var(--muted-foreground)]">Depth:</label>
-                          <input
-                            type="number"
-                            value={section.injectionDepth ?? 0}
-                            onChange={(e) =>
-                              onUpdateSection.mutate({
-                                presetId,
-                                sectionId: section.id,
-                                injectionDepth: parseInt(e.target.value) || 0,
-                              })
-                            }
-                            className="w-16 rounded-lg bg-[var(--secondary)] px-2 py-1 text-xs ring-1 ring-[var(--border)]"
-                          />
-                          <span className="text-[var(--muted-foreground)]">(0 = after last message)</span>
-                        </>
+                      {/* Content (not for markers) */}
+                      {!isMarker && (
+                        <SectionContentTextarea
+                          value={section.content}
+                          sectionName={section.name}
+                          onCommit={(content) =>
+                            onUpdateSection.mutate({
+                              presetId,
+                              sectionId: section.id,
+                              content,
+                            })
+                          }
+                        />
                       )}
-                    </div>
 
-                    {/* Group assignment */}
-                    <div className="flex items-center gap-3 text-xs">
-                      <label className="text-[var(--muted-foreground)]">Group:</label>
-                      <select
-                        value={section.groupId ?? ""}
-                        onChange={(e) =>
-                          onUpdateSection.mutate({
-                            presetId,
-                            sectionId: section.id,
-                            groupId: e.target.value || null,
-                          })
-                        }
-                        className="rounded-lg bg-[var(--secondary)] px-2 py-1 text-xs ring-1 ring-[var(--border)]"
-                      >
-                        <option value="">No group</option>
-                        {[...groupMap.values()].map((g: any) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
-                      {groupMap.size === 0 && (
-                        <span className="text-[10px] text-[var(--muted-foreground)]">
-                          (open Groups panel to create one)
-                        </span>
-                      )}
-                    </div>
+                      {/* Marker config */}
+                      {isMarker &&
+                        section.markerConfig &&
+                        (() => {
+                          const mc =
+                            typeof section.markerConfig === "string"
+                              ? JSON.parse(section.markerConfig)
+                              : section.markerConfig;
+                          const isAgentMarker = mc.type === "agent_data";
+                          return isAgentMarker ? (
+                            <div className="space-y-2">
+                              <div className="rounded-lg bg-[var(--y2k-pink)]/5 p-3 text-xs text-pink-300">
+                                Agent section: <strong>{section.name}</strong>
+                                <p className="mt-1 text-[var(--muted-foreground)]">
+                                  The{" "}
+                                  <code className="rounded bg-black/20 px-1 py-0.5 text-[10px] font-mono text-pink-300">
+                                    {"{{agent::" + (mc.agentType ?? "agent") + "}}"}
+                                  </code>{" "}
+                                  macro will be replaced with the latest output from the agent at assembly time. You can
+                                  add additional instructions around it.
+                                </p>
+                              </div>
+                              <SectionContentTextarea
+                                value={section.content || `{{agent::${mc.agentType ?? "agent"}}}`}
+                                sectionName={section.name}
+                                onCommit={(content) =>
+                                  onUpdateSection.mutate({
+                                    presetId,
+                                    sectionId: section.id,
+                                    content,
+                                  })
+                                }
+                              />
+                            </div>
+                          ) : (
+                            <div className="rounded-lg bg-violet-400/5 p-3 text-xs text-violet-300">
+                              Marker type: <strong>{MARKER_LABELS[mc.type as MarkerType] ?? "Unknown"}</strong>
+                              <p className="mt-1 text-[var(--muted-foreground)]">
+                                Content is auto-generated at assembly time from your characters, lorebook, etc.
+                              </p>
+                            </div>
+                          );
+                        })()}
 
-                    {/* ── Choice Block ── */}
-                    {!isMarker && (
-                      <ChoiceBlockEditor
-                        presetId={presetId}
-                        sectionId={section.id}
-                        choice={choice}
-                        onCreateChoice={onCreateChoice}
-                        onUpdateChoice={onUpdateChoice}
-                        onDeleteChoice={onDeleteChoice}
-                      />
-                    )}
-                  </div>
-                )}
+                      {/* Position & Depth */}
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                        <label className="text-[var(--muted-foreground)]">Position:</label>
+                        <select
+                          value={section.injectionPosition ?? "ordered"}
+                          onChange={(e) =>
+                            onUpdateSection.mutate({
+                              presetId,
+                              sectionId: section.id,
+                              injectionPosition: e.target.value,
+                            })
+                          }
+                          className="rounded-lg bg-[var(--secondary)] px-2 py-1 text-xs ring-1 ring-[var(--border)]"
+                        >
+                          <option value="ordered">Ordered (in sequence)</option>
+                          <option value="depth">Depth (from end of chat)</option>
+                        </select>
+                        {section.injectionPosition === "depth" && (
+                          <>
+                            <label className="text-[var(--muted-foreground)]">Depth:</label>
+                            <input
+                              type="number"
+                              value={section.injectionDepth ?? 0}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) =>
+                                onUpdateSection.mutate({
+                                  presetId,
+                                  sectionId: section.id,
+                                  injectionDepth: parseInt(e.target.value) || 0,
+                                })
+                              }
+                              className="w-16 rounded-lg bg-[var(--secondary)] px-2 py-1 text-xs ring-1 ring-[var(--border)]"
+                            />
+                            <span className="text-[var(--muted-foreground)]">(0 = after last message)</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Group assignment */}
+                      <div className="flex items-center gap-3 text-xs">
+                        <label className="text-[var(--muted-foreground)]">Group:</label>
+                        <select
+                          value={section.groupId ?? ""}
+                          onChange={(e) =>
+                            onUpdateSection.mutate({
+                              presetId,
+                              sectionId: section.id,
+                              groupId: e.target.value || null,
+                            })
+                          }
+                          className="rounded-lg bg-[var(--secondary)] px-2 py-1 text-xs ring-1 ring-[var(--border)]"
+                        >
+                          <option value="">No group</option>
+                          {[...groupMap.values()].map((g: any) => (
+                            <option key={g.id} value={g.id}>
+                              {g.name}
+                            </option>
+                          ))}
+                        </select>
+                        {groupMap.size === 0 && (
+                          <span className="text-[10px] text-[var(--muted-foreground)]">
+                            (open Groups panel to create one)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {showDropAfter && <div className="mx-2 mt-1 h-0.5 rounded-full bg-purple-400" />}
               </div>
             );
           })
@@ -938,182 +1085,941 @@ function SectionsTab({
           Drag sections to reorder · Click to expand · Sections are assembled top-to-bottom
         </p>
       )}
+
+      {/* ── Preset Variables ── */}
+      <PresetVariablesEditor
+        presetId={presetId}
+        variables={choiceBlocks}
+        onCreateVariable={onCreateVariable}
+        onUpdateVariable={onUpdateVariable}
+        onDeleteVariable={onDeleteVariable}
+        onReorderVariables={onReorderVariables}
+      />
     </>
   );
 }
 
-// ── Choice Block Editor (inline, fully editable) ──
+// ── Preset Variables Editor (preset-level, supports multiple) ──
 
-function ChoiceBlockEditor({
+function PresetVariablesEditor({
   presetId,
-  sectionId,
-  choice,
-  onCreateChoice,
-  onUpdateChoice,
-  onDeleteChoice,
+  variables,
+  onCreateVariable,
+  onUpdateVariable,
+  onDeleteVariable,
+  onReorderVariables,
 }: {
   presetId: string;
-  sectionId: string;
-  choice: any | undefined;
-  onCreateChoice: any;
-  onUpdateChoice: any;
-  onDeleteChoice: any;
+  variables: any[];
+  onCreateVariable: any;
+  onUpdateVariable: any;
+  onDeleteVariable: any;
+  onReorderVariables: any;
 }) {
-  const [editingOption, setEditingOption] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const [dragReady, setDragReady] = useState<number | null>(null);
 
-  if (!choice) {
-    return (
-      <div className="rounded-lg border border-dashed border-[var(--border)] p-2.5">
-        <p className="mb-2 text-[10px] text-[var(--muted-foreground)]">
-          <strong>Choice Block</strong> — let users pick between alternative prompts per chat.
-          The selected option replaces this section&apos;s content at generation time.
-        </p>
+  const handleDragStart = (idx: number, e: React.DragEvent) => {
+    setDraggingIdx(idx);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(idx));
+  };
+
+  const calcDropIdx = (cardIdx: number, e: React.DragEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    return e.clientY < midY ? cardIdx : cardIdx + 1;
+  };
+
+  const handleDragOver = (cardIdx: number, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropIdx(calcDropIdx(cardIdx, e));
+  };
+
+  const handleContainerDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropIdx(variables.length);
+  };
+
+  const commitDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const sourceIdx = draggingIdx;
+    const target = dropIdx;
+    setDraggingIdx(null);
+    setDropIdx(null);
+    if (sourceIdx === null || target === null) return;
+    let insertAt = target;
+    if (sourceIdx < insertAt) insertAt--;
+    if (sourceIdx === insertAt) return;
+    const ids = variables.map((v: any) => v.id);
+    const [moved] = ids.splice(sourceIdx, 1);
+    ids.splice(insertAt, 0, moved);
+    onReorderVariables.mutate({ presetId, variableIds: ids });
+  };
+
+  const handleDragEnd = () => {
+    setDraggingIdx(null);
+    setDropIdx(null);
+  };
+
+  return (
+    <div className="mt-6 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Hash size={14} className="text-amber-400" />
+          <span className="text-sm font-semibold">Preset Variables</span>
+          <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
+            {variables.length}
+          </span>
+        </div>
         <button
           onClick={() =>
-            onCreateChoice.mutate({
+            onCreateVariable.mutate({
               presetId,
-              sectionId,
-              label: "Choose a variant",
+              variableName: `VAR_${Date.now()}`,
+              question: "Choose an option",
               options: [
-                { id: `opt_${Date.now()}_a`, label: "Option A", content: "First variant content" },
-                { id: `opt_${Date.now()}_b`, label: "Option B", content: "Second variant content" },
+                { id: `opt_${Date.now()}_a`, label: "Option A", value: "value_a" },
+                { id: `opt_${Date.now()}_b`, label: "Option B", value: "value_b" },
               ],
             })
           }
           className="flex items-center gap-1.5 rounded-lg bg-amber-400/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-400 hover:bg-amber-400/20 active:scale-[0.98]"
         >
-          <Plus size={11} /> Add Choice Block
-        </button>
-      </div>
-    );
-  }
-
-  // Parse options
-  let opts: Array<{ id: string; label: string; content: string }> = [];
-  try {
-    opts = typeof choice.options === "string" ? JSON.parse(choice.options) : choice.options ?? [];
-  } catch {
-    /* empty */
-  }
-
-  const updateOpts = (newOpts: typeof opts) => {
-    onUpdateChoice.mutate({
-      presetId,
-      sectionId,
-      choiceId: choice.id,
-      options: newOpts,
-    });
-  };
-
-  return (
-    <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-amber-400">Choice Block</span>
-          <input
-            value={choice.label ?? ""}
-            onChange={(e) =>
-              onUpdateChoice.mutate({
-                presetId,
-                sectionId,
-                choiceId: choice.id,
-                label: e.target.value,
-              })
-            }
-            className="rounded bg-[var(--background)] px-2 py-0.5 text-[11px] ring-1 ring-[var(--border)] focus:outline-none focus:ring-1 focus:ring-amber-400/50"
-            placeholder="Block label…"
-          />
-        </div>
-        <button
-          onClick={() => {
-            if (confirm("Remove this choice block?")) {
-              onDeleteChoice.mutate({ presetId, sectionId, choiceId: choice.id });
-            }
-          }}
-          className="rounded p-1 hover:bg-[var(--destructive)]/15"
-          title="Remove choice block"
-        >
-          <X size={11} className="text-[var(--destructive)]" />
+          <Plus size={11} /> Add Variable
         </button>
       </div>
 
       <p className="text-[10px] text-[var(--muted-foreground)]">
-        When this preset is assigned to a chat, users pick one option. The chosen option&apos;s content replaces the section at generation time.
+        Define variables that users select when assigning this preset to a chat. Use{" "}
+        <code className="rounded bg-[var(--secondary)] px-1 text-amber-400">{"{{variable_name}}"}</code> in any section
+        to insert the selected value.
       </p>
 
-      {/* Options list */}
-      <div className="space-y-1.5">
-        {opts.map((opt, oi) => (
-          <div key={opt.id} className="rounded-lg bg-[var(--secondary)] ring-1 ring-[var(--border)]">
-            <div className="flex items-center gap-2 px-2.5 py-1.5">
-              <span className="shrink-0 text-[10px] font-medium text-amber-400">{oi + 1}.</span>
-              {editingOption === oi ? (
-                <input
-                  value={opt.label}
-                  onChange={(e) => {
-                    const next = [...opts];
-                    next[oi] = { ...next[oi], label: e.target.value };
-                    updateOpts(next);
+      {variables.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--border)] py-6 text-center">
+          <Hash size={20} className="text-[var(--muted-foreground)]" />
+          <p className="text-[11px] text-[var(--muted-foreground)]">
+            No variables yet. Add one to let users customize prompts per chat.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2" onDragOver={handleContainerDragOver} onDrop={commitDrop}>
+          {variables.map((variable: any, idx: number) => {
+            const showDropBefore =
+              dropIdx === idx && draggingIdx !== null && draggingIdx !== idx && draggingIdx !== idx - 1;
+            const showDropAfter =
+              idx === variables.length - 1 &&
+              dropIdx === variables.length &&
+              draggingIdx !== null &&
+              draggingIdx !== idx;
+            return (
+              <div key={variable.id}>
+                {showDropBefore && <div className="mx-2 mb-1 h-0.5 rounded-full bg-amber-400" />}
+                <div
+                  draggable={dragReady === idx}
+                  onDragStart={(e) => handleDragStart(idx, e)}
+                  onDragOver={(e) => {
+                    e.stopPropagation();
+                    handleDragOver(idx, e);
                   }}
-                  onBlur={() => setEditingOption(null)}
-                  onKeyDown={(e) => e.key === "Enter" && setEditingOption(null)}
-                  className="flex-1 rounded bg-[var(--background)] px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400/50"
-                  autoFocus
-                />
-              ) : (
-                <span
-                  className="flex-1 cursor-pointer truncate text-xs font-medium hover:text-amber-400"
-                  onClick={() => setEditingOption(oi)}
-                  title="Click to rename"
+                  onDrop={(e) => {
+                    e.stopPropagation();
+                    commitDrop(e);
+                  }}
+                  onDragEnd={() => {
+                    handleDragEnd();
+                    setDragReady(null);
+                  }}
+                  className={cn(draggingIdx === idx && "opacity-40")}
                 >
-                  {opt.label}
-                </span>
-              )}
+                  <VariableCard
+                    presetId={presetId}
+                    variable={variable}
+                    isExpanded={expandedId === variable.id}
+                    onToggle={() => setExpandedId(expandedId === variable.id ? null : variable.id)}
+                    onUpdateVariable={onUpdateVariable}
+                    onDeleteVariable={onDeleteVariable}
+                    onGripDown={() => setDragReady(idx)}
+                    onGripUp={() => setDragReady(null)}
+                  />
+                </div>
+                {showDropAfter && <div className="mx-2 mt-1 h-0.5 rounded-full bg-amber-400" />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Single Variable Card ──
+
+function VariableCard({
+  presetId,
+  variable,
+  isExpanded,
+  onToggle,
+  onUpdateVariable,
+  onDeleteVariable,
+  onGripDown,
+  onGripUp,
+}: {
+  presetId: string;
+  variable: any;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onUpdateVariable: any;
+  onDeleteVariable: any;
+  onGripDown: () => void;
+  onGripUp: () => void;
+}) {
+  // Parse options
+  let opts: Array<{ id: string; label: string; value: string }> = [];
+  try {
+    opts = typeof variable.options === "string" ? JSON.parse(variable.options) : (variable.options ?? []);
+  } catch {
+    /* empty */
+  }
+
+  const varName = variable.variableName ?? variable.variable_name ?? "";
+  const question = variable.question ?? "";
+  const isMultiSelect = variable.multiSelect === "true" || variable.multiSelect === true;
+  const isRandomPick = variable.randomPick === "true" || variable.randomPick === true;
+  const separatorValue = variable.separator ?? ", ";
+
+  // Track which option is expanded in the big editor (index or null)
+  const [expandedOptIdx, setExpandedOptIdx] = useState<number | null>(null);
+
+  const update = (data: Record<string, unknown>) => {
+    onUpdateVariable.mutate({ presetId, variableId: variable.id, ...data });
+  };
+
+  const updateOpts = (newOpts: typeof opts) => {
+    update({ options: newOpts });
+  };
+
+  return (
+    <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 transition-all">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <div
+          className="cursor-grab shrink-0 rounded p-0.5 hover:bg-[var(--accent)] active:cursor-grabbing"
+          title="Drag to reorder"
+          onMouseDown={onGripDown}
+          onMouseUp={onGripUp}
+        >
+          <GripVertical size={14} className="text-[var(--muted-foreground)]" />
+        </div>
+        <button onClick={onToggle} className="shrink-0 rounded p-0.5 hover:bg-[var(--accent)]">
+          {isExpanded ? (
+            <ChevronDown size={14} className="text-[var(--muted-foreground)]" />
+          ) : (
+            <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
+          )}
+        </button>
+        <Hash size={14} className="shrink-0 text-amber-400" />
+        <span className="min-w-0 flex-1 cursor-pointer truncate text-sm font-medium text-amber-400" onClick={onToggle}>
+          {varName}
+        </span>
+        <span className="shrink-0 rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
+          {opts.length} options
+        </span>
+        {isMultiSelect && (
+          <span className="shrink-0 rounded bg-purple-400/15 px-1.5 py-0.5 text-[9px] font-medium text-purple-400">
+            {isRandomPick ? "random" : "multi"}
+          </span>
+        )}
+        <code className="shrink-0 text-[10px] text-[var(--muted-foreground)]">{`{{${varName}}}`}</code>
+        <button
+          onClick={() => {
+            if (confirm(`Delete variable "${varName}"?`)) {
+              onDeleteVariable.mutate({ presetId, variableId: variable.id });
+            }
+          }}
+          className="shrink-0 rounded-lg p-1 hover:bg-[var(--destructive)]/15"
+          title="Delete variable"
+        >
+          <Trash2 size={12} className="text-[var(--destructive)]" />
+        </button>
+      </div>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="space-y-3 border-t border-amber-400/20 px-3 py-3">
+          {/* Variable Name */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium text-[var(--muted-foreground)]">Variable Name</label>
+            <VariableNameInput value={varName} onCommit={(v) => update({ variableName: v })} />
+            <p className="text-[9px] text-[var(--muted-foreground)]">
+              Use <code className="text-amber-400">{`{{${varName}}}`}</code> in any prompt section to insert the
+              selected value. Must be alphanumeric/underscores only.
+            </p>
+          </div>
+
+          {/* Question */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium text-[var(--muted-foreground)]">Question (shown to user)</label>
+            <VariableQuestionInput value={question} onCommit={(v) => update({ question: v })} />
+          </div>
+
+          {/* Multi-Select & Random Pick */}
+          <div className="space-y-2 rounded-lg bg-[var(--secondary)] p-2.5 ring-1 ring-[var(--border)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <ListChecks size={12} className="text-purple-400" />
+                <span className="text-[10px] font-medium text-[var(--foreground)]">Multi-Select</span>
+              </div>
               <button
-                onClick={() => {
-                  if (opts.length <= 2) return alert("A choice block needs at least 2 options.");
-                  updateOpts(opts.filter((_, i) => i !== oi));
-                }}
-                className="shrink-0 rounded p-0.5 hover:bg-[var(--destructive)]/15"
-                title="Remove option"
+                onClick={() => update({ multiSelect: !isMultiSelect })}
+                className={cn(
+                  "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full transition-colors",
+                  isMultiSelect ? "bg-purple-400" : "bg-[var(--border)]",
+                )}
               >
-                <X size={10} className="text-[var(--destructive)]" />
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-3 w-3 translate-y-0.5 rounded-full bg-white shadow transition-transform",
+                    isMultiSelect ? "translate-x-3.5" : "translate-x-0.5",
+                  )}
+                />
               </button>
             </div>
-            {editingOption === oi && (
-              <div className="border-t border-[var(--border)] px-2.5 py-1.5">
-                <textarea
-                  value={opt.content}
-                  onChange={(e) => {
-                    const next = [...opts];
-                    next[oi] = { ...next[oi], content: e.target.value };
-                    updateOpts(next);
-                  }}
-                  className="min-h-[60px] w-full rounded bg-[var(--background)] p-2 font-mono text-[11px] ring-1 ring-[var(--border)] focus:outline-none focus:ring-1 focus:ring-amber-400/50"
-                  placeholder="Option content (replaces section content when selected)…"
-                />
+            <p className="text-[9px] text-[var(--muted-foreground)]">
+              Allow users to select multiple options instead of just one.
+            </p>
+
+            {isMultiSelect && (
+              <div className="space-y-2 border-t border-[var(--border)] pt-2">
+                {/* Random Pick Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Shuffle size={12} className="text-amber-400" />
+                    <span className="text-[10px] font-medium text-[var(--foreground)]">Random Pick</span>
+                  </div>
+                  <button
+                    onClick={() => update({ randomPick: !isRandomPick })}
+                    className={cn(
+                      "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full transition-colors",
+                      isRandomPick ? "bg-amber-400" : "bg-[var(--border)]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none inline-block h-3 w-3 translate-y-0.5 rounded-full bg-white shadow transition-transform",
+                        isRandomPick ? "translate-x-3.5" : "translate-x-0.5",
+                      )}
+                    />
+                  </button>
+                </div>
+                <p className="text-[9px] text-[var(--muted-foreground)]">
+                  {isRandomPick
+                    ? "One of the user's selected options will be randomly picked each generation."
+                    : "All selected options will be joined together with the separator below."}
+                </p>
+
+                {/* Separator (only shown when not random pick) */}
+                {!isRandomPick && (
+                  <div className="flex items-center gap-2">
+                    <label className="shrink-0 text-[10px] font-medium text-[var(--muted-foreground)]">Separator</label>
+                    <input
+                      value={separatorValue}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => update({ separator: e.target.value })}
+                      className="w-20 rounded bg-[var(--background)] px-1.5 py-0.5 text-center font-mono text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-1 focus:ring-purple-400/50"
+                      placeholder=", "
+                    />
+                    <span className="text-[9px] text-[var(--muted-foreground)]">
+                      e.g. ", " → Romance, Fantasy, Action
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        ))}
+
+          {/* Options */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-[var(--muted-foreground)]">Options</label>
+            {opts.map((opt, oi) => (
+              <div
+                key={opt.id}
+                className="flex items-center gap-2 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 ring-1 ring-[var(--border)]"
+              >
+                <span className="shrink-0 text-[10px] font-medium text-amber-400">{oi + 1}.</span>
+                <OptionFieldInput
+                  value={opt.label}
+                  onCommit={(v) => {
+                    const next = [...opts];
+                    next[oi] = { ...next[oi], label: v };
+                    updateOpts(next);
+                  }}
+                  className="flex-1 rounded bg-[var(--background)] px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400/50"
+                  placeholder="Label…"
+                />
+                <OptionFieldInput
+                  value={opt.value}
+                  onCommit={(v) => {
+                    const next = [...opts];
+                    next[oi] = { ...next[oi], value: v };
+                    updateOpts(next);
+                  }}
+                  className="flex-1 rounded bg-[var(--background)] px-1.5 py-0.5 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-400/50"
+                  placeholder="Value…"
+                />
+                <button
+                  onClick={() => setExpandedOptIdx(oi)}
+                  className="shrink-0 rounded p-0.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                  title="Expand value editor"
+                >
+                  <Maximize2 size={10} />
+                </button>
+                <button
+                  onClick={() => {
+                    if (opts.length <= 2) return alert("A variable needs at least 2 options.");
+                    updateOpts(opts.filter((_, i) => i !== oi));
+                  }}
+                  className="shrink-0 rounded p-0.5 hover:bg-[var(--destructive)]/15"
+                  title="Remove option"
+                >
+                  <X size={10} className="text-[var(--destructive)]" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => {
+                const newOpt = {
+                  id: `opt_${Date.now()}`,
+                  label: `Option ${String.fromCharCode(65 + opts.length)}`,
+                  value: "",
+                };
+                updateOpts([...opts, newOpt]);
+              }}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium text-amber-400 hover:bg-amber-400/10 active:scale-[0.98]"
+            >
+              <Plus size={10} /> Add Option
+            </button>
+          </div>
+
+          {/* Expanded value editor for a single option */}
+          {expandedOptIdx !== null && opts[expandedOptIdx] && (
+            <ExpandedEditorModal
+              title={`Edit Value: ${opts[expandedOptIdx].label || `Option ${expandedOptIdx + 1}`}`}
+              value={opts[expandedOptIdx].value}
+              onChange={(v) => {
+                const next = [...opts];
+                next[expandedOptIdx] = { ...next[expandedOptIdx], value: v };
+                updateOpts(next);
+              }}
+              onClose={() => setExpandedOptIdx(null)}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Variable Name Input (local state, commits on blur/Enter) ──
+function VariableNameInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  return (
+    <input
+      value={local}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => setLocal(e.target.value.replace(/[^\w]/g, ""))}
+      onBlur={() => {
+        if (local !== value) onCommit(local);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="w-full rounded bg-[var(--background)] px-2 py-1 font-mono text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-1 focus:ring-amber-400/50"
+      placeholder="VARIABLE_NAME"
+    />
+  );
+}
+
+// ── Option field input (local state, debounced commit + commit on blur) ──
+function OptionFieldInput({
+  value,
+  onCommit,
+  className,
+  placeholder,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const [local, setLocal] = useState(value);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    if (!focusedRef.current) setLocal(value);
+  }, [value]);
+  useEffect(
+    () => () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
+  return (
+    <input
+      value={local}
+      onFocus={(e) => {
+        focusedRef.current = true;
+        e.target.select();
+      }}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+          onCommit(e.target.value);
+        }, 600);
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        if (local !== value) onCommit(local);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className={className}
+      placeholder={placeholder}
+    />
+  );
+}
+
+// ── Variable Question Input (local state, commits on blur/Enter) ──
+function VariableQuestionInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  return (
+    <input
+      value={local}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        if (local !== value) onCommit(local);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="w-full rounded bg-[var(--background)] px-2 py-1 text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-1 focus:ring-amber-400/50"
+      placeholder="What should the user choose?"
+    />
+  );
+}
+
+// ── Locally-controlled section content textarea (commits on blur) ──
+function SectionContentTextarea({
+  value,
+  sectionName,
+  onCommit,
+}: {
+  value: string;
+  sectionName?: string;
+  onCommit: (v: string) => void;
+}) {
+  const [local, setLocal] = useState(value);
+  const [expanded, setExpanded] = useState(false);
+  const [showMacroRef, setShowMacroRef] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusedRef = useRef(false);
+
+  // Only sync from parent when not actively editing
+  useEffect(() => {
+    if (!focusedRef.current) setLocal(value);
+  }, [value]);
+
+  const commit = useCallback(() => {
+    if (local !== value) onCommit(local);
+  }, [local, value, onCommit]);
+
+  // Debounced auto-save while typing (800ms)
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setLocal(e.target.value);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      const val = e.target.value;
+      if (val !== value) onCommit(val);
+    }, 800);
+  };
+
+  // Commit on blur immediately
+  const handleBlur = () => {
+    focusedRef.current = false;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    commit();
+  };
+
+  const handleFocus = () => {
+    focusedRef.current = true;
+  };
+
+  // Cleanup timer on unmount
+  useEffect(
+    () => () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
+
+  return (
+    <>
+      <div className="relative">
+        <textarea
+          value={local}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          onFocus={handleFocus}
+          onKeyDown={(e) =>
+            handleTextareaTab(e, local, (v) => {
+              setLocal(v);
+              if (timeoutRef.current) clearTimeout(timeoutRef.current);
+              timeoutRef.current = setTimeout(() => {
+                if (v !== value) onCommit(v);
+              }, 800);
+            })
+          }
+          className="min-h-[120px] w-full rounded-lg bg-[var(--secondary)] p-2.5 pr-8 font-mono text-xs text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+          placeholder="Prompt content… (supports {{user}}, {{char}}, {{// comment}}, {{trim}} macros)"
+        />
+        <div className="absolute right-1.5 top-1.5 flex flex-col gap-0.5">
+          <button
+            onClick={() => setExpanded(true)}
+            className="rounded p-1 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            title="Expand editor"
+          >
+            <Maximize2 size={12} />
+          </button>
+          <button
+            onClick={() => setShowMacroRef(true)}
+            className="rounded p-1 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            title="Macros reference"
+          >
+            <BookOpen size={12} />
+          </button>
+        </div>
       </div>
 
-      {/* Add new option */}
-      <button
-        onClick={() => {
-          const newOpt = {
-            id: `opt_${Date.now()}`,
-            label: `Option ${String.fromCharCode(65 + opts.length)}`,
-            content: "",
-          };
-          updateOpts([...opts, newOpt]);
-          setEditingOption(opts.length);
-        }}
-        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium text-amber-400 hover:bg-amber-400/10 active:scale-[0.98]"
-      >
-        <Plus size={10} /> Add Option
-      </button>
+      {/* Macros reference modal */}
+      {showMacroRef && <MacrosReferenceModal onClose={() => setShowMacroRef(false)} />}
+
+      {/* Expanded editor modal */}
+      {expanded && (
+        <ExpandedEditorModal
+          title={sectionName ? `Edit: ${sectionName}` : "Edit Prompt"}
+          value={local}
+          onChange={(v) => {
+            setLocal(v);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+              if (v !== value) onCommit(v);
+            }, 800);
+          }}
+          onClose={() => {
+            setExpanded(false);
+            if (local !== value) onCommit(local);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Expanded prompt editor modal ──
+function ExpandedEditorModal({
+  title,
+  value,
+  onChange,
+  onClose,
+}: {
+  title: string;
+  value: string;
+  onChange: (v: string) => void;
+  onClose: () => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [local, setLocal] = useState(value);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync from parent only on initial mount (not on every re-render)
+  useEffect(() => {
+    setLocal(value);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Focus the textarea on mount
+  useEffect(() => {
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  }, []);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (local !== value) onChange(local);
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose, onChange, local, value]);
+
+  // Cleanup timer on unmount
+  useEffect(
+    () => () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const v = e.target.value;
+    setLocal(v);
+    // Debounced commit so the parent stays in sync without cursor jumps
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      onChange(v);
+    }, 600);
+  };
+
+  const handleClose = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (local !== value) onChange(local);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
+      <div className="relative flex h-[80vh] w-full max-w-3xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/50">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <button onClick={handleClose} className="rounded-lg p-1.5 hover:bg-[var(--accent)]">
+            <X size={16} />
+          </button>
+        </div>
+        {/* Editor */}
+        <div className="flex-1 overflow-hidden p-4">
+          <textarea
+            ref={textareaRef}
+            value={local}
+            onChange={handleChange}
+            onKeyDown={(e) =>
+              handleTextareaTab(e, local, (v) => {
+                setLocal(v);
+                if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                timeoutRef.current = setTimeout(() => {
+                  onChange(v);
+                }, 600);
+              })
+            }
+            className="h-full w-full resize-none rounded-lg bg-[var(--secondary)] p-4 font-mono text-sm text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+            placeholder="Prompt content… (supports macros like {{user}}, {{char}}, etc.)"
+          />
+        </div>
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-2.5">
+          <p className="text-[10px] text-[var(--muted-foreground)]">Changes auto-save. Press Escape to close.</p>
+          <button
+            onClick={handleClose}
+            className="rounded-xl bg-gradient-to-r from-purple-400 to-violet-500 px-4 py-1.5 text-xs font-medium text-white shadow-md hover:shadow-lg active:scale-[0.98]"
+          >
+            Done
+          </button>
+        </div>
+      </div>
     </div>
+  );
+}
+
+// ── Macros reference data ──
+const MACRO_REFERENCE = [
+  {
+    category: "Identity",
+    macros: [
+      { macro: "{{user}}", desc: "User's display name (persona name)" },
+      { macro: "{{persona}}", desc: "Alias for {{user}}" },
+      { macro: "{{char}}", desc: "Current character's name" },
+      { macro: "{{characters}}", desc: "Comma-separated list of all character names" },
+    ],
+  },
+  {
+    category: "Context",
+    macros: [
+      { macro: "{{input}}", desc: "Last user message" },
+      { macro: "{{model}}", desc: "Current model name" },
+      { macro: "{{chatId}}", desc: "Current chat ID" },
+    ],
+  },
+  {
+    category: "Date & Time",
+    macros: [
+      { macro: "{{date}}", desc: "Current date (YYYY-MM-DD)" },
+      { macro: "{{time}}", desc: "Current time (HH:MM)" },
+      { macro: "{{datetime}}", desc: "Full ISO datetime" },
+      { macro: "{{weekday}}", desc: "Day name (Monday, etc.)" },
+      { macro: "{{isotime}}", desc: "ISO timestamp" },
+    ],
+  },
+  {
+    category: "Random",
+    macros: [
+      { macro: "{{random}}", desc: "Random number 0-100" },
+      { macro: "{{random:X:Y}}", desc: "Random number between X and Y" },
+      { macro: "{{roll:XdY}}", desc: "Dice roll (e.g. {{roll:2d6}})" },
+    ],
+  },
+  {
+    category: "Variables",
+    macros: [
+      { macro: "{{variable_name}}", desc: "Insert a preset variable's selected value" },
+      { macro: "{{getvar::name}}", desc: "Read a dynamic variable" },
+      { macro: "{{setvar::name::value}}", desc: "Set a variable value" },
+      { macro: "{{addvar::name::value}}", desc: "Append to a variable" },
+      { macro: "{{incvar::name}}", desc: "Increment numeric variable by 1" },
+      { macro: "{{decvar::name}}", desc: "Decrement numeric variable by 1" },
+    ],
+  },
+  {
+    category: "Formatting",
+    macros: [
+      { macro: "{{newline}}", desc: "Literal newline character" },
+      { macro: "{{trim}}", desc: "Remove surrounding whitespace" },
+      { macro: "{{trimStart}}", desc: "Remove leading whitespace" },
+      { macro: "{{trimEnd}}", desc: "Remove trailing whitespace" },
+      { macro: "{{uppercase}}...{{/uppercase}}", desc: "Convert text to UPPERCASE" },
+      { macro: "{{lowercase}}...{{/lowercase}}", desc: "Convert text to lowercase" },
+    ],
+  },
+  {
+    category: "Utility",
+    macros: [
+      { macro: "{{// comment}}", desc: "Author comment (stripped at assembly)" },
+      { macro: "{{noop}}", desc: "No operation (removed)" },
+      { macro: '{{banned "text"}}', desc: "Content filter stub (removed)" },
+    ],
+  },
+];
+
+// ── Macros Reference Modal ──
+function MacrosReferenceModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/50">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <BookOpen size={16} className="text-purple-400" />
+            <h3 className="text-sm font-semibold">Macros Reference</h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-[var(--accent)]">
+            <X size={16} />
+          </button>
+        </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <p className="text-[11px] text-[var(--muted-foreground)]">
+            Use these macros in your prompt sections. They will be replaced with actual values at generation time.
+          </p>
+          {MACRO_REFERENCE.map((cat) => (
+            <div key={cat.category}>
+              <h4 className="mb-1.5 text-[11px] font-semibold text-purple-400">{cat.category}</h4>
+              <div className="space-y-1">
+                {cat.macros.map((m) => (
+                  <div key={m.macro} className="flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--accent)]">
+                    <code className="shrink-0 rounded bg-[var(--secondary)] px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                      {m.macro}
+                    </code>
+                    <span className="text-[11px] text-[var(--muted-foreground)]">{m.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Footer */}
+        <div className="border-t border-[var(--border)] px-4 py-2.5 text-center">
+          <button
+            onClick={onClose}
+            className="rounded-xl px-4 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Locally-controlled section name input (commits on blur / Enter) ──
+function SectionNameInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState(value);
+
+  // Sync when the external value changes (e.g. after refetch)
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+
+  const commit = () => {
+    const trimmed = local.trim();
+    if (trimmed && trimmed !== value) onCommit(trimmed);
+    else setLocal(value); // revert if empty
+  };
+
+  return (
+    <input
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commit();
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="flex-1 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+      placeholder="Section name"
+    />
   );
 }
 
@@ -1134,61 +2040,165 @@ function ParametersTab({
 
   return (
     <>
-      <FieldGroup label="Generation" help="Core parameters that control how the AI generates text. Higher temperature = more creative, lower = more focused.">
+      <FieldGroup
+        label="Generation"
+        help="Core parameters that control how the AI generates text. Higher temperature = more creative, lower = more focused. With modern models, it is recommended to use default parameters."
+      >
         <div className="grid grid-cols-2 gap-3">
-          <NumberField label="Temperature" help="Controls randomness. Low (0.1–0.5) = focused and deterministic. High (0.8–1.5) = creative and varied. Default 1.0." value={params.temperature as number ?? 1} onChange={(v) => set("temperature", v)} min={0} max={2} step={0.05} />
-          <NumberField label="Max Tokens" help="Maximum number of tokens (roughly words) the AI can generate in a single response. Higher = longer replies." value={params.maxTokens as number ?? 4096} onChange={(v) => set("maxTokens", v)} min={1} max={32768} step={256} />
-          <NumberField label="Top P" help="Nucleus sampling: only considers tokens whose cumulative probability is within this value. Lower = more focused. 1.0 = consider all tokens." value={params.topP as number ?? 1} onChange={(v) => set("topP", v)} min={0} max={1} step={0.05} />
-          <NumberField label="Top K" help="Only sample from the top K most likely tokens. 0 = disabled (use Top P instead). Lower values = more predictable output." value={params.topK as number ?? 0} onChange={(v) => set("topK", v)} min={0} max={500} step={1} />
-          <NumberField label="Min P" help="Minimum probability threshold. Tokens below this probability relative to the most likely token are filtered out. Helps avoid very unlikely words." value={params.minP as number ?? 0} onChange={(v) => set("minP", v)} min={0} max={1} step={0.01} />
-          <NumberField label="Max Context" help="Maximum number of tokens the model can see (your messages + its reply). Larger context = more chat history sent, but costs more." value={params.maxContext as number ?? 128000} onChange={(v) => set("maxContext", v)} min={1024} max={2097152} step={1024} />
+          <NumberField
+            label="Temperature"
+            help="Controls randomness. Low (0.1–0.5) = focused and deterministic. High (0.8–1.5) = creative and varied. Default 1.0."
+            value={(params.temperature as number) ?? 1}
+            onChange={(v) => set("temperature", v)}
+            min={0}
+            max={2}
+            step={0.05}
+          />
+          <NumberField
+            label="Max Tokens"
+            help="Maximum number of tokens (roughly words) the AI can generate in a single response. Higher = longer replies."
+            value={(params.maxTokens as number) ?? 4096}
+            onChange={(v) => set("maxTokens", v)}
+            min={1}
+            max={32768}
+            step={256}
+          />
+          <NumberField
+            label="Top P"
+            help="Nucleus sampling: only considers tokens whose cumulative probability is within this value. Lower = more focused. 1.0 = consider all tokens."
+            value={(params.topP as number) ?? 1}
+            onChange={(v) => set("topP", v)}
+            min={0}
+            max={1}
+            step={0.05}
+          />
+          <NumberField
+            label="Top K"
+            help="Only sample from the top K most likely tokens. 0 = disabled (use Top P instead). Lower values = more predictable output."
+            value={(params.topK as number) ?? 0}
+            onChange={(v) => set("topK", v)}
+            min={0}
+            max={500}
+            step={1}
+          />
+          <NumberField
+            label="Min P"
+            help="Minimum probability threshold. Tokens below this probability relative to the most likely token are filtered out. Helps avoid very unlikely words."
+            value={(params.minP as number) ?? 0}
+            onChange={(v) => set("minP", v)}
+            min={0}
+            max={1}
+            step={0.01}
+          />
         </div>
       </FieldGroup>
 
-      <FieldGroup label="Penalties" help="Penalties discourage the AI from repeating itself. Positive values reduce repetition, negative values encourage it.">
+      <FieldGroup
+        label="Penalties"
+        help="Penalties discourage the AI from repeating itself. Positive values reduce repetition, negative values encourage it."
+      >
         <div className="grid grid-cols-2 gap-3">
-          <NumberField label="Frequency" help="Penalizes tokens based on how often they've appeared so far. Higher values make the AI avoid repeating the same words." value={params.frequencyPenalty as number ?? 0} onChange={(v) => set("frequencyPenalty", v)} min={-2} max={2} step={0.05} />
-          <NumberField label="Presence" help="Penalizes tokens that have appeared at all. Encourages the AI to talk about new topics rather than revisiting old ones." value={params.presencePenalty as number ?? 0} onChange={(v) => set("presencePenalty", v)} min={-2} max={2} step={0.05} />
+          <NumberField
+            label="Frequency"
+            help="Penalizes tokens based on how often they've appeared so far. Higher values make the AI avoid repeating the same words."
+            value={(params.frequencyPenalty as number) ?? 0}
+            onChange={(v) => set("frequencyPenalty", v)}
+            min={-2}
+            max={2}
+            step={0.05}
+          />
+          <NumberField
+            label="Presence"
+            help="Penalizes tokens that have appeared at all. Encourages the AI to talk about new topics rather than revisiting old ones."
+            value={(params.presencePenalty as number) ?? 0}
+            onChange={(v) => set("presencePenalty", v)}
+            min={-2}
+            max={2}
+            step={0.05}
+          />
         </div>
       </FieldGroup>
 
-      <FieldGroup label="Reasoning" help="For models that support chain-of-thought reasoning (like o1, o3). Controls how much the model 'thinks' before responding.">
-        <div className="flex gap-2">
-          {(["low", "medium", "high", null] as const).map((level) => (
-            <button
-              key={level ?? "off"}
-              onClick={() => set("reasoningEffort", level)}
-              className={cn(
-                "rounded-xl px-3 py-1.5 text-xs font-medium transition-all",
-                params.reasoningEffort === level
-                  ? "bg-purple-400/15 text-purple-400 ring-1 ring-purple-400/30"
-                  : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]",
-              )}
-            >
-              {level ?? "Off"}
-            </button>
-          ))}
+      <FieldGroup
+        label="Reasoning"
+        help="For models that support chain-of-thought reasoning (like o1, o3, GPT-5). Controls how much the model 'thinks' before responding."
+      >
+        <div className="space-y-3">
+          <div>
+            <div className="text-xs font-medium text-[var(--muted-foreground)] mb-1.5">Effort</div>
+            <div className="flex gap-2">
+              {(["low", "medium", "high", "maximum", null] as const).map((level) => (
+                <button
+                  key={level ?? "off"}
+                  onClick={() => set("reasoningEffort", level)}
+                  className={cn(
+                    "rounded-xl px-3 py-1.5 text-xs font-medium transition-all",
+                    params.reasoningEffort === level
+                      ? "bg-purple-400/15 text-purple-400 ring-1 ring-purple-400/30"
+                      : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]",
+                  )}
+                >
+                  {level ? level.charAt(0).toUpperCase() + level.slice(1) : "Off"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-[var(--muted-foreground)] mb-1.5">Verbosity</div>
+            <p className="text-[10px] text-[var(--muted-foreground)] mb-1.5">
+              Controls output length. Low = concise, High = thorough explanations. Supported by GPT-5+ models.
+            </p>
+            <div className="flex gap-2">
+              {(["low", "medium", "high", null] as const).map((level) => (
+                <button
+                  key={level ?? "off"}
+                  onClick={() => set("verbosity", level)}
+                  className={cn(
+                    "rounded-xl px-3 py-1.5 text-xs font-medium transition-all",
+                    (params.verbosity ?? null) === level
+                      ? "bg-blue-400/15 text-blue-400 ring-1 ring-blue-400/30"
+                      : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]",
+                  )}
+                >
+                  {level ? level.charAt(0).toUpperCase() + level.slice(1) : "Off"}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </FieldGroup>
 
       <FieldGroup label="Options" help="Additional flags that affect how messages are processed and displayed.">
         <div className="space-y-2">
           <ToggleOption
-            label="Squash System Messages"
-            description="Merge consecutive system messages into one"
-            value={params.squashSystemMessages as boolean ?? true}
-            onChange={(v) => set("squashSystemMessages", v)}
-          />
-          <ToggleOption
             label="Show Thoughts"
             description="Display model reasoning/thinking"
-            value={params.showThoughts as boolean ?? true}
+            value={(params.showThoughts as boolean) ?? true}
             onChange={(v) => set("showThoughts", v)}
+          />
+          <ToggleOption
+            label="Strict Role Formatting"
+            description="Enforces system → user → assistant alternation. Sections after Chat History become user messages."
+            value={(params.strictRoleFormatting as boolean) ?? true}
+            onChange={(v) =>
+              onChange({ ...params, strictRoleFormatting: v, ...(v ? { singleUserMessage: false } : {}) })
+            }
+          />
+          <ToggleOption
+            label="Single User Message"
+            description="Sends the entire prompt and chat history as one user message. Some prompting styles require this."
+            value={(params.singleUserMessage as boolean) ?? false}
+            onChange={(v) =>
+              onChange({ ...params, singleUserMessage: v, ...(v ? { strictRoleFormatting: false } : {}) })
+            }
           />
         </div>
       </FieldGroup>
 
-      <FieldGroup label="Stop Sequences" help="Text patterns that make the AI stop generating when encountered. Useful for preventing the AI from speaking as your character.">
+      <FieldGroup
+        label="Stop Sequences"
+        help="Text patterns that make the AI stop generating when encountered. Useful for preventing the AI from speaking as your character."
+      >
         <StopSequencesEditor
           sequences={(params.stopSequences as string[]) ?? []}
           onChange={(v) => set("stopSequences", v)}
@@ -1258,8 +2268,8 @@ function ReviewTab({ presetId }: { presetId: string }) {
     <>
       <FieldGroup label="AI Prompt Review">
         <p className="mb-3 text-xs text-[var(--muted-foreground)]">
-          Have an AI analyze your prompt preset for clarity, consistency, coverage, and efficiency.
-          This requires an active API connection.
+          Have an AI analyze your prompt preset for clarity, consistency, coverage, and efficiency. This requires an
+          active API connection.
         </p>
         <ConnectionSelector
           onSelect={(connId) => startReview(connId)}
@@ -1269,9 +2279,7 @@ function ReviewTab({ presetId }: { presetId: string }) {
       </FieldGroup>
 
       {error && (
-        <div className="rounded-xl bg-[var(--destructive)]/10 p-3 text-xs text-[var(--destructive)]">
-          {error}
-        </div>
+        <div className="rounded-xl bg-[var(--destructive)]/10 p-3 text-xs text-[var(--destructive)]">{error}</div>
       )}
 
       {reviewOutput && (
@@ -1337,6 +2345,7 @@ function NumberField({
         min={min}
         max={max}
         step={step}
+        onFocus={(e) => e.target.select()}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
         className="w-full rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
       />
@@ -1370,24 +2379,13 @@ function ToggleOption({
           value ? "bg-purple-400" : "bg-[var(--border)]",
         )}
       >
-        <div
-          className={cn(
-            "h-4 w-4 rounded-full bg-white shadow transition-transform",
-            value && "translate-x-4",
-          )}
-        />
+        <div className={cn("h-4 w-4 rounded-full bg-white shadow transition-transform", value && "translate-x-4")} />
       </div>
     </button>
   );
 }
 
-function StopSequencesEditor({
-  sequences,
-  onChange,
-}: {
-  sequences: string[];
-  onChange: (v: string[]) => void;
-}) {
+function StopSequencesEditor({ sequences, onChange }: { sequences: string[]; onChange: (v: string[]) => void }) {
   const [input, setInput] = useState("");
 
   const add = () => {

@@ -42,23 +42,22 @@ export function RightPanel() {
   return (
     <div className="flex h-full flex-col">
       {/* Header - OS window style */}
-      <div className="relative border-b border-[var(--sidebar-border)]">
-        {/* Pastel gradient title bar */}
-        <div className="pastel-gradient h-[3px] opacity-80" />
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <div className={`flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br ${config.gradient} text-white shadow-sm`}>
-              {config.icon}
-            </div>
-            <h2 className="text-sm font-semibold text-[var(--y2k-lavender)]">{config.title}</h2>
-          </div>
-          <button
-            onClick={close}
-            className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--y2k-pink)] active:scale-90"
+      <div className="relative flex h-12 flex-shrink-0 items-center justify-between px-4">
+        <div className="absolute inset-x-0 bottom-0 h-px bg-[var(--border)]/30" />
+        <div className="flex items-center gap-2.5">
+          <div
+            className={`flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br ${config.gradient} text-white shadow-sm`}
           >
-            <X size={14} />
-          </button>
+            {config.icon}
+          </div>
+          <h2 className="text-sm font-semibold text-[var(--y2k-lavender)]">{config.title}</h2>
         </div>
+        <button
+          onClick={close}
+          className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--y2k-pink)] active:scale-90"
+        >
+          <X size={14} />
+        </button>
       </div>
 
       {/* Content with animated transitions */}

@@ -4,13 +4,9 @@
 // ──────────────────────────────────────────────
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useUIStore } from "../../stores/ui.store";
-import {
-  useAgentConfigs,
-  useUpdateAgent,
-  useCreateAgent,
-  type AgentConfigRow,
-} from "../../hooks/use-agents";
+import { useAgentConfigs, useUpdateAgent, useCreateAgent, type AgentConfigRow } from "../../hooks/use-agents";
 import { useConnections } from "../../hooks/use-connections";
+import { useCustomTools, type CustomToolRow } from "../../hooks/use-custom-tools";
 import {
   ArrowLeft,
   Save,
@@ -29,6 +25,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Trash2,
+  Layers,
+  Music,
+  ExternalLink,
 } from "lucide-react";
 import { useDeleteAgent } from "../../hooks/use-agents";
 import { cn } from "../../lib/utils";
@@ -36,6 +35,7 @@ import { HelpTooltip } from "../ui/HelpTooltip";
 import {
   BUILT_IN_AGENTS,
   BUILT_IN_TOOLS,
+  DEFAULT_AGENT_TOOLS,
   getDefaultAgentPrompt,
   type AgentPhase,
   type ToolDefinition,
@@ -74,39 +74,36 @@ export function AgentEditor() {
 
   const { data: agentConfigs } = useAgentConfigs();
   const { data: connections } = useConnections();
+  const { data: customToolsRaw } = useCustomTools();
   const updateAgent = useUpdateAgent();
   const createAgent = useCreateAgent();
   const deleteAgent = useDeleteAgent();
 
   // Find built-in meta (null for custom agents)
-  const builtIn = useMemo(
-    () => BUILT_IN_AGENTS.find((a) => a.id === agentDetailId) ?? null,
-    [agentDetailId],
-  );
+  const builtIn = useMemo(() => BUILT_IN_AGENTS.find((a) => a.id === agentDetailId) ?? null, [agentDetailId]);
 
   // Find DB config — for built-ins, match by type; for custom agents, match by id
   const dbConfig = useMemo(() => {
     if (!agentDetailId || !agentConfigs) return null;
-    return (agentConfigs as AgentConfigRow[]).find(
-      (c) => c.type === agentDetailId || c.id === agentDetailId,
-    ) ?? null;
+    return (agentConfigs as AgentConfigRow[]).find((c) => c.type === agentDetailId || c.id === agentDetailId) ?? null;
   }, [agentDetailId, agentConfigs]);
 
   // Custom agent = DB entry with no matching built-in
   const isCustomAgent = !builtIn && !!dbConfig;
 
   // Default prompt for this agent type
-  const defaultPrompt = useMemo(
-    () => (agentDetailId ? getDefaultAgentPrompt(agentDetailId) : ""),
-    [agentDetailId],
-  );
+  const defaultPrompt = useMemo(() => (agentDetailId ? getDefaultAgentPrompt(agentDetailId) : ""), [agentDetailId]);
 
   // ── Local editable state ──
   const [localName, setLocalName] = useState("");
   const [localDescription, setLocalDescription] = useState("");
   const [localPhase, setLocalPhase] = useState<AgentPhase>("post_processing");
   const [localConnectionId, setLocalConnectionId] = useState("");
+  const [localContextSize, setLocalContextSize] = useState<number | "">("");
   const [localPrompt, setLocalPrompt] = useState("");
+  const [localInjectAsSection, setLocalInjectAsSection] = useState(false);
+  const [localEnabledTools, setLocalEnabledTools] = useState<string[]>([]);
+  const [localSpotifyToken, setLocalSpotifyToken] = useState("");
   const [dirty, setDirty] = useState(false);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -120,12 +117,25 @@ export function AgentEditor() {
       setLocalDescription(dbConfig.description);
       setLocalPhase(dbConfig.phase as AgentPhase);
       setLocalConnectionId(dbConfig.connectionId ?? "");
+      const settings = dbConfig.settings
+        ? typeof dbConfig.settings === "string"
+          ? JSON.parse(dbConfig.settings)
+          : dbConfig.settings
+        : {};
+      setLocalContextSize(settings.contextSize ?? "");
+      setLocalInjectAsSection(settings.injectAsSection ?? false);
+      setLocalEnabledTools(settings.enabledTools ?? DEFAULT_AGENT_TOOLS[dbConfig.type] ?? []);
+      setLocalSpotifyToken(settings.spotifyAccessToken ?? "");
       setLocalPrompt(dbConfig.promptTemplate || "");
     } else if (builtIn) {
       setLocalName(builtIn.name);
       setLocalDescription(builtIn.description);
       setLocalPhase(builtIn.phase);
       setLocalConnectionId("");
+      setLocalContextSize("");
+      setLocalInjectAsSection(builtIn.defaultInjectAsSection ?? false);
+      setLocalEnabledTools(DEFAULT_AGENT_TOOLS[builtIn.id] ?? []);
+      setLocalSpotifyToken("");
       setLocalPrompt("");
     } else {
       // Brand new custom agent — start empty
@@ -133,6 +143,10 @@ export function AgentEditor() {
       setLocalDescription("");
       setLocalPhase("post_processing");
       setLocalConnectionId("");
+      setLocalContextSize("");
+      setLocalInjectAsSection(false);
+      setLocalEnabledTools([]);
+      setLocalSpotifyToken("");
       setLocalPrompt("");
     }
     setDirty(false);
@@ -163,6 +177,12 @@ export function AgentEditor() {
       phase: localPhase,
       connectionId: localConnectionId || null,
       promptTemplate: localPrompt,
+      settings: {
+        ...(localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
+        ...(localInjectAsSection ? { injectAsSection: true } : {}),
+        enabledTools: localEnabledTools,
+        ...(localSpotifyToken ? { spotifyAccessToken: localSpotifyToken } : {}),
+      },
     };
 
     try {
@@ -172,12 +192,15 @@ export function AgentEditor() {
         // For built-in agents, use their type; for custom, generate a slug
         const typeId = builtIn
           ? agentDetailId
-          : `custom-${localName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
-        const created = await createAgent.mutateAsync({
+          : `custom-${localName
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/(^-|-$)/g, "")}`;
+        const created = (await createAgent.mutateAsync({
           ...payload,
           type: typeId,
           enabled: builtIn?.enabledByDefault ?? true,
-        }) as { id?: string } | undefined;
+        })) as { id?: string } | undefined;
         // After creating a new custom agent, switch agentDetailId to its DB id
         if (!builtIn && created?.id) {
           openAgentDetail(created.id);
@@ -189,7 +212,22 @@ export function AgentEditor() {
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save agent config");
     }
-  }, [agentDetailId, localName, localDescription, localPhase, localConnectionId, localPrompt, dbConfig, builtIn, updateAgent, createAgent]);
+  }, [
+    agentDetailId,
+    localName,
+    localDescription,
+    localPhase,
+    localConnectionId,
+    localPrompt,
+    localContextSize,
+    localInjectAsSection,
+    localEnabledTools,
+    localSpotifyToken,
+    dbConfig,
+    builtIn,
+    updateAgent,
+    createAgent,
+  ]);
 
   const handleResetPrompt = useCallback(() => {
     setLocalPrompt("");
@@ -256,9 +294,7 @@ export function AgentEditor() {
               <Check size={11} /> Saved
             </span>
           )}
-          {dirty && !saveError && (
-            <span className="mr-2 text-[10px] font-medium text-amber-400">Unsaved</span>
-          )}
+          {dirty && !saveError && <span className="mr-2 text-[10px] font-medium text-amber-400">Unsaved</span>}
           {isCustomAgent && dbConfig && (
             <button
               onClick={handleDelete}
@@ -321,9 +357,12 @@ export function AgentEditor() {
       {/* ── Body ── */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
-
           {/* ── Description ── */}
-          <FieldGroup label="Description" icon={<Info size={14} className="text-[var(--y2k-pink)]" />} help="A short summary of what this agent does. Shown in the agents panel to help you identify each agent.">
+          <FieldGroup
+            label="Description"
+            icon={<Info size={14} className="text-[var(--y2k-pink)]" />}
+            help="A short summary of what this agent does. Shown in the agents panel to help you identify each agent."
+          >
             <input
               value={localDescription}
               onChange={(e) => {
@@ -336,7 +375,11 @@ export function AgentEditor() {
           </FieldGroup>
 
           {/* ── Pipeline Phase ── */}
-          <FieldGroup label="Pipeline Phase" icon={<Zap size={14} className="text-[var(--y2k-pink)]" />} help="When this agent runs during generation. Pre-Generation runs before the AI replies, Parallel runs alongside, Post-Processing runs after the reply is complete.">
+          <FieldGroup
+            label="Pipeline Phase"
+            icon={<Zap size={14} className="text-[var(--y2k-pink)]" />}
+            help="When this agent runs during generation. Pre-Generation runs before the AI replies, Parallel runs alongside, Post-Processing runs after the reply is complete."
+          >
             <div className="grid grid-cols-3 gap-2">
               {(Object.entries(PHASE_META) as [AgentPhase, typeof phaseMeta][]).map(([phase, meta]) => {
                 const isActive = localPhase === phase;
@@ -361,13 +404,15 @@ export function AgentEditor() {
                 );
               })}
             </div>
-            <p className="mt-1.5 text-[10px] text-[var(--muted-foreground)]">
-              {phaseMeta.description}
-            </p>
+            <p className="mt-1.5 text-[10px] text-[var(--muted-foreground)]">{phaseMeta.description}</p>
           </FieldGroup>
 
           {/* ── Connection Override ── */}
-          <FieldGroup label="Connection Override" icon={<Link2 size={14} className="text-[var(--y2k-pink)]" />} help="Use a different AI connection for this agent. For example, use a faster/cheaper model for background processing tasks.">
+          <FieldGroup
+            label="Connection Override"
+            icon={<Link2 size={14} className="text-[var(--y2k-pink)]" />}
+            help="Use a different AI connection for this agent. For example, use a faster/cheaper model for background processing tasks."
+          >
             <select
               value={localConnectionId}
               onChange={(e) => {
@@ -377,21 +422,146 @@ export function AgentEditor() {
               className="w-full rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             >
               <option value="">Use default connection</option>
-              {(connections as Array<{ id: string; name: string; provider: string }> | undefined)?.map(
-                (conn) => (
-                  <option key={conn.id} value={conn.id}>
-                    {conn.name} ({conn.provider})
-                  </option>
-                ),
-              )}
+              {(connections as Array<{ id: string; name: string; provider: string }> | undefined)?.map((conn) => (
+                <option key={conn.id} value={conn.id}>
+                  {conn.name} ({conn.provider})
+                </option>
+              ))}
             </select>
             <p className="mt-1 text-[10px] text-[var(--muted-foreground)]">
               Optionally use a different API connection for this agent (e.g. a cheaper model for background tasks).
             </p>
           </FieldGroup>
 
+          {/* ── Context Size ── */}
+          <FieldGroup
+            label="Context Size"
+            icon={<Clock size={14} className="text-[var(--y2k-pink)]" />}
+            help="How many recent chat messages this agent receives as context. More messages = more context but higher token usage. Leave blank for the default (20 messages)."
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={localContextSize}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setLocalContextSize(v === "" ? "" : Math.max(1, Math.min(200, parseInt(v) || 1)));
+                  markDirty();
+                }}
+                placeholder="20"
+                className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <span className="text-[11px] text-[var(--muted-foreground)]">messages</span>
+            </div>
+            <p className="mt-1 text-[10px] text-[var(--muted-foreground)]">
+              When agents are batched together (same model), the highest context size in the group is used.
+            </p>
+          </FieldGroup>
+
+          {/* ── Inject as Prompt Section ── */}
+          <FieldGroup
+            label="Add as Prompt Section"
+            icon={<Layers size={14} className="text-[var(--y2k-pink)]" />}
+            help="When enabled, this agent's output becomes available as a marker section in prompt presets. Add the section in your preset to inject the agent's latest data into the prompt."
+          >
+            <button
+              onClick={() => {
+                setLocalInjectAsSection(!localInjectAsSection);
+                markDirty();
+              }}
+              className="flex items-center gap-3 rounded-xl bg-[var(--secondary)] px-4 py-3 ring-1 ring-[var(--border)] transition-all hover:bg-[var(--accent)]"
+            >
+              {localInjectAsSection ? (
+                <ToggleRight size={20} className="text-emerald-400" />
+              ) : (
+                <ToggleLeft size={20} className="text-[var(--muted-foreground)]" />
+              )}
+              <div className="text-left">
+                <p className="text-sm font-medium">{localInjectAsSection ? "Enabled" : "Disabled"}</p>
+                <p className="text-[10px] text-[var(--muted-foreground)]">
+                  {localInjectAsSection
+                    ? `"${localName}" appears as a section option in prompt presets`
+                    : "Agent output is not injected into prompts"}
+                </p>
+              </div>
+            </button>
+          </FieldGroup>
+
+          {/* ── Spotify Settings (only shown for Spotify agent) ── */}
+          {(agentDetailId === "spotify" || dbConfig?.type === "spotify") && (
+            <FieldGroup
+              label="Spotify Connection"
+              icon={<Music size={14} className="text-green-400" />}
+              help="Connect your Spotify account to let this agent control playback."
+            >
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-white/60 mb-1">Access Token</label>
+                  <input
+                    type="password"
+                    value={localSpotifyToken}
+                    onChange={(e) => {
+                      setLocalSpotifyToken(e.target.value);
+                      setDirty(true);
+                    }}
+                    placeholder="Paste your Spotify access token..."
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20"
+                  />
+                </div>
+                <div className="rounded-lg border border-green-500/10 bg-green-500/5 p-3 text-[11px] text-white/50 space-y-2">
+                  <p className="font-medium text-green-400/80">How to get a Spotify access token:</p>
+                  <ol className="list-decimal list-inside space-y-1 text-white/40">
+                    <li>
+                      Go to the{" "}
+                      <a
+                        href="https://developer.spotify.com/dashboard"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-400 hover:underline inline-flex items-center gap-0.5"
+                      >
+                        Spotify Developer Dashboard <ExternalLink size={9} />
+                      </a>
+                    </li>
+                    <li>
+                      Create an app (set redirect URI to{" "}
+                      <code className="text-white/50">http://localhost:3000/callback</code>)
+                    </li>
+                    <li>
+                      Note your <strong>Client ID</strong> and <strong>Client Secret</strong>
+                    </li>
+                    <li>
+                      Use the{" "}
+                      <a
+                        href="https://developer.spotify.com/documentation/web-api/tutorials/getting-started"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-400 hover:underline inline-flex items-center gap-0.5"
+                      >
+                        Authorization Guide <ExternalLink size={9} />
+                      </a>{" "}
+                      to get an access token with scopes:{" "}
+                      <code className="text-white/50">
+                        user-modify-playback-state user-read-playback-state playlist-read-private user-library-read
+                      </code>
+                    </li>
+                    <li>Paste the access token above</li>
+                  </ol>
+                  <p className="text-[10px] text-white/30 mt-1">
+                    Requires Spotify Premium. Token expires after ~1 hour — re-paste as needed.
+                  </p>
+                </div>
+              </div>
+            </FieldGroup>
+          )}
+
           {/* ── Prompt Template ── */}
-          <FieldGroup label="Prompt Template" icon={<FileText size={14} className="text-[var(--y2k-pink)]" />} help="The system instructions this agent receives. Built-in agents have sensible defaults. You can override to customize behavior.">
+          <FieldGroup
+            label="Prompt Template"
+            icon={<FileText size={14} className="text-[var(--y2k-pink)]" />}
+            help="The system instructions this agent receives. Built-in agents have sensible defaults. You can override to customize behavior."
+          >
             {/* Toolbar — only show default/override status for built-in agents */}
             {builtIn && (
               <div className="flex items-center gap-2 mb-2">
@@ -424,47 +594,83 @@ export function AgentEditor() {
               </div>
             )}
 
-            <textarea
-              value={builtIn && isUsingDefaultPrompt ? "" : localPrompt}
-              onChange={(e) => {
-                setLocalPrompt(e.target.value);
-                markDirty();
-              }}
-              rows={16}
-              placeholder={builtIn ? (defaultPrompt || "Custom instructions for this agent…") : "Write the system prompt for this agent…"}
-              className="w-full resize-y rounded-xl bg-[var(--secondary)] px-4 py-3 font-mono text-xs leading-relaxed ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            />
+            {builtIn && isUsingDefaultPrompt ? (
+              <div className="relative">
+                <pre className="w-full max-h-[50vh] overflow-y-auto resize-y rounded-xl bg-[var(--secondary)] px-4 py-3 font-mono text-xs leading-relaxed ring-1 ring-[var(--border)] text-[var(--muted-foreground)] whitespace-pre-wrap">
+                  {defaultPrompt || "No default prompt."}
+                </pre>
+                <span className="absolute right-3 top-2 rounded-md bg-[var(--card)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                  Default — click "Copy default to edit" to customize
+                </span>
+              </div>
+            ) : (
+              <textarea
+                value={localPrompt}
+                onChange={(e) => {
+                  setLocalPrompt(e.target.value);
+                  markDirty();
+                }}
+                rows={16}
+                placeholder="Write the system prompt for this agent…"
+                className="w-full resize-y rounded-xl bg-[var(--secondary)] px-4 py-3 font-mono text-xs leading-relaxed ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--ring)] max-h-[60vh] overflow-y-auto"
+              />
+            )}
             <p className="mt-1 text-[10px] text-[var(--muted-foreground)]">
               {builtIn
                 ? "Leave empty to use the built-in default prompt. Edit to override with your own instructions."
                 : "Write the full system prompt for this custom agent."}
             </p>
 
-            {/* Default prompt preview — only for built-in agents */}
-            {builtIn && isUsingDefaultPrompt && defaultPrompt && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-[11px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-                  View built-in default prompt
-                </summary>
-                <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-[var(--card)] p-4 font-mono text-[11px] leading-relaxed text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-                  {defaultPrompt}
-                </pre>
-              </details>
-            )}
+            {/* Default prompt preview removed — now shown inline above */}
           </FieldGroup>
 
           {/* ── Available Tools (Function Calling) ── */}
-          <FieldGroup label="Tools / Function Calling" icon={<Wrench size={14} className="text-[var(--y2k-pink)]" />}>
+          <FieldGroup
+            label="Tools / Function Calling"
+            icon={<Wrench size={14} className="text-[var(--y2k-pink)]" />}
+            help="Select which tools this agent can use during generation. The AI can call these functions and receive results back for multi-step interactions."
+          >
             <p className="text-[10px] text-[var(--muted-foreground)] mb-3">
-              When tools are enabled, the AI can call these functions during generation. Results are fed back into the conversation for multi-step tool use.
+              Toggle tools on or off for this agent. When enabled for a chat, only selected tools will be available
+              during generation.
             </p>
             <div className="space-y-2">
               {BUILT_IN_TOOLS.map((tool: ToolDefinition) => (
-                <ToolCard key={tool.name} tool={tool} />
+                <ToolCard
+                  key={tool.name}
+                  tool={tool}
+                  enabled={localEnabledTools.includes(tool.name)}
+                  onToggle={(name) => {
+                    setLocalEnabledTools((prev) =>
+                      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+                    );
+                    markDirty();
+                  }}
+                />
               ))}
+              {(customToolsRaw as CustomToolRow[] | undefined)
+                ?.filter((t) => t.enabled === "true")
+                .map((tool) => (
+                  <ToolCard
+                    key={tool.name}
+                    tool={{
+                      name: tool.name,
+                      description: tool.description,
+                      parameters: JSON.parse(tool.parametersSchema || "{}"),
+                    }}
+                    enabled={localEnabledTools.includes(tool.name)}
+                    onToggle={(name) => {
+                      setLocalEnabledTools((prev) =>
+                        prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+                      );
+                      markDirty();
+                    }}
+                    isCustom
+                  />
+                ))}
             </div>
             <p className="mt-2 text-[10px] text-[var(--muted-foreground)]">
-              Tools are available to all agents. Enable tool-use per chat via Chat Settings → "Enable Function Calling".
+              Tool-use must also be enabled per chat via Chat Settings → "Enable Function Calling".
             </p>
           </FieldGroup>
 
@@ -472,11 +678,27 @@ export function AgentEditor() {
           <div className="rounded-xl bg-[var(--card)] p-4 ring-1 ring-[var(--border)]">
             <h3 className="mb-2 text-xs font-semibold text-[var(--foreground)]">About this Agent</h3>
             <div className="space-y-1.5 text-[11px] text-[var(--muted-foreground)]">
-              <p><strong className="text-[var(--foreground)]">Type:</strong> {isCustomAgent ? "Custom" : agentDetailId}</p>
-              <p><strong className="text-[var(--foreground)]">Phase:</strong> {phaseMeta.label} — {phaseMeta.description}</p>
-              <p><strong className="text-[var(--foreground)]">DB Status:</strong> {dbConfig ? `Persisted (ID: ${dbConfig.id})` : "Not yet saved — click Save to persist"}</p>
+              <p>
+                <strong className="text-[var(--foreground)]">Type:</strong> {isCustomAgent ? "Custom" : agentDetailId}
+              </p>
+              <p>
+                <strong className="text-[var(--foreground)]">Phase:</strong> {phaseMeta.label} — {phaseMeta.description}
+              </p>
+              <p>
+                <strong className="text-[var(--foreground)]">DB Status:</strong>{" "}
+                {dbConfig ? `Persisted (ID: ${dbConfig.id})` : "Not yet saved — click Save to persist"}
+              </p>
               {builtIn && (
-                <p><strong className="text-[var(--foreground)]">Enabled:</strong> {dbConfig ? (dbConfig.enabled === "true" ? "Yes" : "No") : (builtIn.enabledByDefault ? "Yes (default)" : "No (default)")}</p>
+                <p>
+                  <strong className="text-[var(--foreground)]">Enabled:</strong>{" "}
+                  {dbConfig
+                    ? dbConfig.enabled === "true"
+                      ? "Yes"
+                      : "No"
+                    : builtIn.enabledByDefault
+                      ? "Yes (default)"
+                      : "No (default)"}
+                </p>
               )}
             </div>
           </div>
@@ -513,26 +735,60 @@ function FieldGroup({
   );
 }
 
-function ToolCard({ tool }: { tool: ToolDefinition }) {
+function ToolCard({
+  tool,
+  enabled,
+  onToggle,
+  isCustom,
+}: {
+  tool: ToolDefinition;
+  enabled: boolean;
+  onToggle: (name: string) => void;
+  isCustom?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const params = tool.parameters.properties ?? {};
   const required = tool.parameters.required ?? [];
 
   return (
-    <div className="rounded-xl ring-1 ring-[var(--border)] bg-[var(--card)] overflow-hidden transition-all">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-[var(--accent)]/50 transition-colors"
-      >
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--y2k-purple)]/15 text-[var(--y2k-purple)]">
-          <Wrench size={12} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold font-mono text-[var(--foreground)]">{tool.name}</p>
-          <p className="text-[10px] text-[var(--muted-foreground)] truncate">{tool.description}</p>
-        </div>
-        <span className="text-[10px] text-[var(--muted-foreground)]">{expanded ? "▲" : "▼"}</span>
-      </button>
+    <div
+      className={cn(
+        "rounded-xl ring-1 overflow-hidden transition-all",
+        enabled ? "ring-[var(--primary)]/50 bg-[var(--primary)]/5" : "ring-[var(--border)] bg-[var(--card)]",
+      )}
+    >
+      <div className="flex w-full items-center gap-2.5 px-3 py-2.5">
+        <button onClick={() => onToggle(tool.name)} className="shrink-0">
+          {enabled ? (
+            <ToggleRight size={20} className="text-[var(--primary)]" />
+          ) : (
+            <ToggleLeft size={20} className="text-[var(--muted-foreground)]" />
+          )}
+        </button>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left hover:opacity-80 transition-opacity"
+        >
+          <div
+            className={cn(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-lg",
+              isCustom
+                ? "bg-[var(--y2k-pink)]/15 text-[var(--y2k-pink)]"
+                : "bg-[var(--y2k-purple)]/15 text-[var(--y2k-purple)]",
+            )}
+          >
+            <Wrench size={12} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold font-mono text-[var(--foreground)]">
+              {tool.name}
+              {isCustom && <span className="ml-1.5 text-[9px] font-normal text-[var(--y2k-pink)]">custom</span>}
+            </p>
+            <p className="text-[10px] text-[var(--muted-foreground)] truncate">{tool.description}</p>
+          </div>
+          <span className="text-[10px] text-[var(--muted-foreground)]">{expanded ? "▲" : "▼"}</span>
+        </button>
+      </div>
       {expanded && (
         <div className="border-t border-[var(--border)] px-3 py-2.5 space-y-1.5">
           <p className="text-[10px] font-medium text-[var(--muted-foreground)]">Parameters:</p>
@@ -548,11 +804,7 @@ function ToolCard({ tool }: { tool: ToolDefinition }) {
                 <span className="text-[var(--muted-foreground)]">
                   <span className="text-[var(--y2k-pink)]">{p.type}</span>
                   {p.description && ` — ${p.description}`}
-                  {p.enum && (
-                    <span className="ml-1 text-[10px]">
-                      [{p.enum.join(", ")}]
-                    </span>
-                  )}
+                  {p.enum && <span className="ml-1 text-[10px]">[{p.enum.join(", ")}]</span>}
                 </span>
               </div>
             );

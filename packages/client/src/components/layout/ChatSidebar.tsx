@@ -1,34 +1,38 @@
 // ──────────────────────────────────────────────
 // Layout: Chat Sidebar (polished with rich buttons)
 // ──────────────────────────────────────────────
-import { Plus, MessageSquare, Search, Trash2, BookOpen, Theater, Lock, GitBranch } from "lucide-react";
-import { useChats, useCreateChat, useDeleteChat } from "../../hooks/use-chats";
+import { Plus, MessageSquare, Search, Trash2, BookOpen, Theater, Lock, GitBranch, AlertTriangle } from "lucide-react";
+import { useChats, useCreateChat, useDeleteChat, useDeleteChatGroup } from "../../hooks/use-chats";
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
 import { cn } from "../../lib/utils";
 import { useState, useCallback, useMemo } from "react";
 import type { ChatMode } from "@rpg-engine/shared";
+import { Modal } from "../ui/Modal";
 
-const MODE_CONFIG: Record<string, { icon: React.ReactNode; label: string; shortLabel: string; gradient: string; description: string; comingSoon?: boolean }> = {
+const MODE_CONFIG: Record<
+  string,
+  { icon: React.ReactNode; label: string; shortLabel: string; bg: string; description: string; comingSoon?: boolean }
+> = {
   conversation: {
     icon: <MessageSquare size={14} />,
     label: "Conversation",
     shortLabel: "Chat",
-    gradient: "from-sky-400 to-blue-500",
+    bg: "linear-gradient(135deg, #4de5dd, #3ab8b1)",
     description: "A straightforward AI conversation — no roleplay elements.",
   },
   roleplay: {
     icon: <BookOpen size={14} />,
     label: "Roleplay",
     shortLabel: "RP",
-    gradient: "from-pink-400 to-rose-500",
+    bg: "linear-gradient(135deg, #eb8951, #d97530)",
     description: "Immersive roleplay with characters, game state tracking, and world simulation.",
   },
   visual_novel: {
     icon: <Theater size={14} />,
     label: "Visual Novel",
     shortLabel: "VN",
-    gradient: "from-purple-400 to-violet-500",
+    bg: "linear-gradient(135deg, #e15c8c, #c94776)",
     description: "Visual novel experience with backgrounds, sprites, text boxes, and choices.",
     comingSoon: true,
   },
@@ -38,16 +42,20 @@ export function ChatSidebar() {
   const { data: chats, isLoading } = useChats();
   const createChat = useCreateChat();
   const deleteChat = useDeleteChat();
+  const deleteChatGroup = useDeleteChatGroup();
   const activeChatId = useChatStore((s) => s.activeChatId);
   const setActiveChatId = useChatStore((s) => s.setActiveChatId);
   const hasAnyDetailOpen = useUIStore((s) => s.hasAnyDetailOpen);
   const closeAllDetails = useUIStore((s) => s.closeAllDetails);
   const [searchQuery, setSearchQuery] = useState("");
   const [showModePicker, setShowModePicker] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    chatId: string;
+    groupId: string | null;
+    branchCount: number;
+  } | null>(null);
 
-  const filtered = chats?.filter((c) =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const filtered = chats?.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   // ── Collapse chats that share a groupId into one entry ──
   const displayChats = useMemo(() => {
@@ -64,9 +72,7 @@ export function ChatSidebar() {
     }
 
     // Sort by most recently updated first
-    const sorted = [...filtered].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
+    const sorted = [...filtered].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
     const seenGroups = new Set<string>();
     const result: { chat: (typeof filtered)[0]; branchCount: number }[] = [];
@@ -88,21 +94,28 @@ export function ChatSidebar() {
   const activeChat = chats?.find((c) => c.id === activeChatId);
   const activeGroupId = activeChat?.groupId ?? null;
 
-  const handleNewChat = useCallback((mode: ChatMode) => {
-    setShowModePicker(false);
-    createChat.mutate(
-      { name: `New ${MODE_CONFIG[mode]?.label ?? mode}`, mode, characterIds: [] },
-      { onSuccess: (chat) => setActiveChatId(chat.id) },
-    );
-  }, [createChat, setActiveChatId]);
+  const handleNewChat = useCallback(
+    (mode: ChatMode) => {
+      setShowModePicker(false);
+      createChat.mutate(
+        { name: `New ${MODE_CONFIG[mode]?.label ?? mode}`, mode, characterIds: [] },
+        {
+          onSuccess: (chat) => {
+            setActiveChatId(chat.id);
+            useChatStore.getState().setShouldOpenSettings(true);
+          },
+        },
+      );
+    },
+    [createChat, setActiveChatId],
+  );
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--sidebar-border)] px-4 py-3">
-        <h2 className="retro-glow-text text-sm font-bold tracking-tight">
-          ✧ Chats
-        </h2>
+      <div className="relative flex h-12 items-center justify-between px-4">
+        <div className="absolute inset-x-0 bottom-0 h-px bg-[var(--border)]/30" />
+        <h2 className="retro-glow-text text-sm font-bold tracking-tight">✧ Chats</h2>
         <button
           onClick={() => setShowModePicker(true)}
           className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition-all hover:bg-[var(--sidebar-accent)] hover:text-[var(--y2k-pink)] active:scale-90"
@@ -148,12 +161,12 @@ export function ChatSidebar() {
         <div className="stagger-children flex flex-col gap-0.5">
           {displayChats.map(({ chat, branchCount }) => {
             const cfg = MODE_CONFIG[chat.mode] ?? MODE_CONFIG.conversation;
-            const isActive =
-              activeChatId === chat.id ||
-              (chat.groupId != null && chat.groupId === activeGroupId);
+            const isActive = activeChatId === chat.id || (chat.groupId != null && chat.groupId === activeGroupId);
 
             return (
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 key={chat.groupId ?? chat.id}
                 onClick={() => {
                   if (hasAnyDetailOpen()) {
@@ -164,32 +177,38 @@ export function ChatSidebar() {
                 }}
                 className={cn(
                   "group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all duration-150",
-                  isActive
-                    ? "bg-[var(--sidebar-accent)] shadow-sm"
-                    : "hover:bg-[var(--sidebar-accent)]/60",
+                  isActive ? "bg-[var(--sidebar-accent)] shadow-sm" : "hover:bg-[var(--sidebar-accent)]/60",
                 )}
               >
                 {/* Active indicator */}
                 {isActive && (
-                  <span className={cn("absolute -left-0.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-gradient-to-b", cfg.gradient)} />
+                  <span
+                    className="absolute -left-0.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full"
+                    style={{ background: cfg.bg }}
+                  />
                 )}
 
                 {/* Mode icon */}
-                <div className={cn(
-                  "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-xs transition-transform group-active:scale-90",
-                  isActive
-                    ? `bg-gradient-to-br ${cfg.gradient} text-white shadow-sm`
-                    : "bg-[var(--secondary)] text-[var(--muted-foreground)]",
-                )}>
+                <div
+                  className={cn(
+                    "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-xs transition-transform group-active:scale-90",
+                    isActive ? "text-white shadow-sm" : "bg-[var(--secondary)] text-[var(--muted-foreground)]",
+                  )}
+                  style={isActive ? { background: cfg.bg } : undefined}
+                >
                   {cfg.icon}
                 </div>
 
                 {/* Name + branch count */}
                 <div className="min-w-0 flex-1">
-                  <span className={cn(
-                    "block truncate text-sm",
-                    isActive ? "font-medium text-[var(--sidebar-accent-foreground)]" : "text-[var(--sidebar-foreground)]",
-                  )}>
+                  <span
+                    className={cn(
+                      "block truncate text-sm",
+                      isActive
+                        ? "font-medium text-[var(--sidebar-accent-foreground)]"
+                        : "text-[var(--sidebar-foreground)]",
+                    )}
+                  >
                     {chat.name}
                   </span>
                 </div>
@@ -211,30 +230,23 @@ export function ChatSidebar() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm("Delete this chat?")) {
-                      deleteChat.mutate(chat.id);
-                      if (activeChatId === chat.id) setActiveChatId(null);
+                    if (branchCount > 1 && chat.groupId) {
+                      setDeleteTarget({ chatId: chat.id, groupId: chat.groupId, branchCount });
+                    } else {
+                      if (confirm("Delete this chat?")) {
+                        deleteChat.mutate(chat.id);
+                        if (activeChatId === chat.id) setActiveChatId(null);
+                      }
                     }
                   }}
                   className="shrink-0 rounded-md p-1 opacity-0 transition-all hover:bg-[var(--destructive)]/20 group-hover:opacity-100"
                 >
                   <Trash2 size={12} className="text-[var(--destructive)]" />
                 </button>
-              </button>
+              </div>
             );
           })}
         </div>
-      </div>
-
-      {/* Footer - New Chat button */}
-      <div className="border-t border-[var(--sidebar-border)] p-3">
-        <button
-          onClick={() => setShowModePicker(true)}
-          className="bunny-glow flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-400 to-purple-500 px-3 py-2.5 text-sm font-medium text-white shadow-lg shadow-pink-500/20 transition-all hover:shadow-pink-500/30 active:scale-[0.98]"
-        >
-          <Plus size={15} />
-          New Chat
-        </button>
       </div>
 
       {/* ── Mode Picker Overlay ── */}
@@ -252,9 +264,7 @@ export function ChatSidebar() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <p className="mb-4 text-xs text-[var(--muted-foreground)]">
-              Choose what kind of experience you want:
-            </p>
+            <p className="mb-4 text-xs text-[var(--muted-foreground)]">Choose what kind of experience you want:</p>
             <div className="flex flex-col gap-3">
               {(["conversation", "roleplay", "visual_novel"] as const).map((mode) => {
                 const cfg = MODE_CONFIG[mode];
@@ -272,11 +282,13 @@ export function ChatSidebar() {
                     )}
                   >
                     {/* Icon */}
-                    <div className={cn(
-                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md",
-                      cfg.gradient,
-                      disabled && "grayscale",
-                    )}>
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-md",
+                        disabled && "grayscale",
+                      )}
+                      style={{ background: cfg.bg }}
+                    >
                       {cfg.icon}
                     </div>
 
@@ -301,6 +313,50 @@ export function ChatSidebar() {
           </div>
         </div>
       )}
+
+      {/* ── Delete Branch Modal ── */}
+      <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Delete Chat" width="max-w-sm">
+        {deleteTarget && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--destructive)]/10">
+                <AlertTriangle size={18} className="text-[var(--destructive)]" />
+              </div>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                This conversation has{" "}
+                <strong className="text-[var(--foreground)]">{deleteTarget.branchCount} branches</strong>. What would
+                you like to delete?
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  deleteChat.mutate(deleteTarget.chatId);
+                  if (activeChatId === deleteTarget.chatId) setActiveChatId(null);
+                  setDeleteTarget(null);
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-xs font-medium ring-1 ring-[var(--border)] transition-all hover:bg-[var(--accent)] active:scale-[0.98]"
+              >
+                <Trash2 size={13} />
+                Delete This Branch Only
+              </button>
+              <button
+                onClick={() => {
+                  if (deleteTarget.groupId) {
+                    deleteChatGroup.mutate(deleteTarget.groupId);
+                    if (activeGroupId === deleteTarget.groupId) setActiveChatId(null);
+                  }
+                  setDeleteTarget(null);
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--destructive)]/10 px-3 py-2.5 text-xs font-medium text-[var(--destructive)] ring-1 ring-[var(--destructive)]/20 transition-all hover:bg-[var(--destructive)]/20 active:scale-[0.98]"
+              >
+                <Trash2 size={13} />
+                Delete All {deleteTarget.branchCount} Branches
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

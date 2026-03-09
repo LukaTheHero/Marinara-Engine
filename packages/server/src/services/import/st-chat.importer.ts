@@ -85,8 +85,8 @@ export async function importSTChat(jsonlContent: string, db: DB, opts?: ImportST
     try {
       const stMsg = JSON.parse(lines[i]!) as STChatMessage;
 
-      // Skip system/hidden messages
-      if (stMsg.is_system) continue;
+      // Skip pure system messages (but keep user messages flagged as system — ST does this for RP intros)
+      if (stMsg.is_system && !stMsg.is_user) continue;
 
       const role = stMsg.is_user ? "user" : "assistant";
       const content = stMsg.extra?.display_text ?? stMsg.mes;

@@ -28,8 +28,8 @@ export const PROVIDERS: Record<APIProvider, ProviderDefinition> = {
   anthropic: {
     id: "anthropic",
     name: "Anthropic",
-    defaultBaseUrl: "https://api.anthropic.com",
-    modelsEndpoint: "/v1/models",
+    defaultBaseUrl: "https://api.anthropic.com/v1",
+    modelsEndpoint: "/models",
     supportsStreaming: true,
     usesAuthHeader: false,
     apiKeyHeader: "x-api-key",

@@ -7,16 +7,7 @@ import { Modal } from "../ui/Modal";
 import { useConnections } from "../../hooks/use-connections";
 import { useCreateCharacter } from "../../hooks/use-characters";
 import { useUIStore } from "../../stores/ui.store";
-import {
-  Sparkles,
-  Loader2,
-  Wand2,
-  CheckCircle,
-  AlertCircle,
-  ChevronDown,
-  User,
-  Save,
-} from "lucide-react";
+import { Sparkles, Loader2, Wand2, CheckCircle, AlertCircle, ChevronDown, User, Save } from "lucide-react";
 import { api } from "../../lib/api-client";
 
 interface Props {
@@ -169,16 +160,17 @@ export function CharacterMakerModal({ open, onClose }: Props) {
               onChange={(e) => setConnectionId(e.target.value)}
               className="w-full appearance-none rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-3 py-2 pr-8 text-sm outline-none focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20"
             >
-              {connections.length === 0 && (
-                <option value="">No connections available</option>
-              )}
+              {connections.length === 0 && <option value="">No connections available</option>}
               {connections.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.model})
                 </option>
               ))}
             </select>
-            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+            <ChevronDown
+              size={14}
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+            />
           </div>
         </div>
 
@@ -269,18 +261,10 @@ export function CharacterMakerModal({ open, onClose }: Props) {
 
             {/* Preview sections */}
             <div className="grid gap-2 text-xs">
-              {generated.personality && (
-                <PreviewSection label="Personality" text={generated.personality} />
-              )}
-              {generated.backstory && (
-                <PreviewSection label="Backstory" text={generated.backstory} />
-              )}
-              {generated.appearance && (
-                <PreviewSection label="Appearance" text={generated.appearance} />
-              )}
-              {generated.first_mes && (
-                <PreviewSection label="First Message" text={generated.first_mes} />
-              )}
+              {generated.personality && <PreviewSection label="Personality" text={generated.personality} />}
+              {generated.backstory && <PreviewSection label="Backstory" text={generated.backstory} />}
+              {generated.appearance && <PreviewSection label="Appearance" text={generated.appearance} />}
+              {generated.first_mes && <PreviewSection label="First Message" text={generated.first_mes} />}
             </div>
 
             {/* Save button */}
@@ -311,9 +295,7 @@ export function CharacterMakerModal({ open, onClose }: Props) {
 function PreviewSection({ label, text }: { label: string; text: string }) {
   return (
     <div className="rounded-lg bg-[var(--secondary)] p-2.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-        {label}
-      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">{label}</span>
       <p className="mt-1 text-[var(--foreground)] line-clamp-3">{text}</p>
     </div>
   );

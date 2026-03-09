@@ -38,6 +38,25 @@ export interface ChatOptions {
   stop?: string[];
   /** Tool/function definitions for function calling */
   tools?: LLMToolDefinition[];
+  /** Enable Anthropic prompt caching */
+  enableCaching?: boolean;
+  /** Callback for streaming thinking/reasoning content */
+  onThinking?: (chunk: string) => void;
+  /** Callback for streaming text tokens as they arrive (used in tool path) */
+  onToken?: (chunk: string) => void;
+  /** Enable extended thinking (reasoning models) */
+  enableThinking?: boolean;
+  /** Reasoning effort level for models that support it */
+  reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+  /** Output verbosity for GPT-5+ models */
+  verbosity?: "low" | "medium" | "high";
+}
+
+/** Token usage statistics returned by the model */
+export interface LLMUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 /** Result from a non-streaming chat call that may include tool calls */
@@ -45,6 +64,7 @@ export interface ChatCompletionResult {
   content: string | null;
   toolCalls: LLMToolCall[];
   finishReason: "stop" | "tool_calls" | "length" | string;
+  usage?: LLMUsage;
 }
 
 /**
@@ -58,25 +78,28 @@ export abstract class BaseLLMProvider {
   ) {}
 
   /**
-   * Stream a chat completion. Yields text chunks.
+   * Stream a chat completion. Yields text chunks, optionally returns usage on completion.
    */
-  abstract chat(
-    messages: ChatMessage[],
-    options: ChatOptions,
-  ): AsyncGenerator<string, void, unknown>;
+  abstract chat(messages: ChatMessage[], options: ChatOptions): AsyncGenerator<string, LLMUsage | void, unknown>;
 
   /**
    * Non-streaming chat completion with tool-use support.
    * Default implementation collects from the streaming generator.
+   * If onToken is provided, streams text chunks in real time.
    */
-  async chatComplete(
-    messages: ChatMessage[],
-    options: ChatOptions,
-  ): Promise<ChatCompletionResult> {
+  async chatComplete(messages: ChatMessage[], options: ChatOptions): Promise<ChatCompletionResult> {
     let content = "";
-    for await (const chunk of this.chat(messages, { ...options, stream: false })) {
-      content += chunk;
+    const useStream = !!options.onToken;
+    const gen = this.chat(messages, { ...options, stream: useStream });
+    let result = await gen.next();
+    while (!result.done) {
+      content += result.value;
+      if (options.onToken) {
+        options.onToken(result.value);
+      }
+      result = await gen.next();
     }
-    return { content, toolCalls: [], finishReason: "stop" };
+    const usage = result.value || undefined;
+    return { content, toolCalls: [], finishReason: "stop", usage };
   }
 }

@@ -21,6 +21,25 @@ export interface Persona {
   dialogueColor: string;
   /** Chat bubble / dialogue box background color */
   boxColor: string;
+  /** Persona status bars configuration (Satiety, Energy, etc.) */
+  personaStats?: PersonaStatsConfig;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A single persona status bar definition. */
+export interface PersonaStatBar {
+  name: string;
+  value: number;
+  max: number;
+  /** Hex color for the stat bar */
+  color: string;
+}
+
+/** Configuration for persona status bars (needs/physical state). */
+export interface PersonaStatsConfig {
+  /** Whether persona stat tracking is enabled */
+  enabled: boolean;
+  /** The stat bars to track */
+  bars: PersonaStatBar[];
 }

@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Prompt Presets, Groups, Sections & Choices
 // ──────────────────────────────────────────────
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 import type { DB } from "../../db/connection.js";
 import { promptPresets, promptGroups, promptSections, choiceBlocks } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -69,6 +69,8 @@ export function createPromptsStorage(db: DB) {
       if (data.parameters !== undefined) updateFields.parameters = JSON.stringify(data.parameters);
       if (data.wrapFormat !== undefined) updateFields.wrapFormat = data.wrapFormat;
       if (data.author !== undefined) updateFields.author = data.author;
+      if ((data as any).defaultChoices !== undefined)
+        updateFields.defaultChoices = JSON.stringify((data as any).defaultChoices);
       await db.update(promptPresets).set(updateFields).where(eq(promptPresets.id, id));
       return this.getById(id);
     },
@@ -134,27 +136,25 @@ export function createPromptsStorage(db: DB) {
         if (newSection) sectionMap.set(s.id, newSection.id);
       }
 
-      // Copy choice blocks
-      for (const s of sections) {
-        const choices = await this.getChoiceBlock(s.id);
-        if (choices && sectionMap.has(s.id)) {
-          await this.createChoiceBlock({
-            sectionId: sectionMap.get(s.id)!,
-            label: choices.label,
-            options: JSON.parse(choices.options as string),
-          });
-        }
+      // Copy choice blocks (preset variables)
+      const existingVariables = await this.listChoiceBlocksForPreset(preset.id);
+      for (const v of existingVariables) {
+        await this.createChoiceBlock({
+          presetId: newPreset.id,
+          variableName: v.variableName,
+          question: v.question,
+          options: JSON.parse(v.options as string),
+          multiSelect: v.multiSelect === "true",
+          separator: v.separator,
+          randomPick: v.randomPick === "true",
+        });
       }
 
       // Copy section/group order
       const oldSectionOrder = JSON.parse(preset.sectionOrder as string) as string[];
-      const newSectionOrder = oldSectionOrder
-        .map((sid) => sectionMap.get(sid))
-        .filter(Boolean) as string[];
+      const newSectionOrder = oldSectionOrder.map((sid) => sectionMap.get(sid)).filter(Boolean) as string[];
       const oldGroupOrder = JSON.parse(preset.groupOrder as string) as string[];
-      const newGroupOrder = oldGroupOrder
-        .map((gid) => groupMap.get(gid))
-        .filter(Boolean) as string[];
+      const newGroupOrder = oldGroupOrder.map((gid) => groupMap.get(gid)).filter(Boolean) as string[];
       await this.update(newPreset.id, { sectionOrder: newSectionOrder, groupOrder: newGroupOrder });
 
       return this.getById(newPreset.id);
@@ -165,11 +165,7 @@ export function createPromptsStorage(db: DB) {
     // ═══════════════════════════════════════════
 
     async listGroups(presetId: string) {
-      return db
-        .select()
-        .from(promptGroups)
-        .where(eq(promptGroups.presetId, presetId))
-        .orderBy(promptGroups.order);
+      return db.select().from(promptGroups).where(eq(promptGroups.presetId, presetId)).orderBy(promptGroups.order);
     },
 
     async getGroup(id: string) {
@@ -239,7 +235,10 @@ export function createPromptsStorage(db: DB) {
       await this.update(presetId, { groupOrder: groupIds });
       // Also update individual order fields
       for (let i = 0; i < groupIds.length; i++) {
-        await db.update(promptGroups).set({ order: i * 100 }).where(eq(promptGroups.id, groupIds[i]!));
+        await db
+          .update(promptGroups)
+          .set({ order: i * 100 })
+          .where(eq(promptGroups.id, groupIds[i]!));
       }
     },
 
@@ -295,7 +294,8 @@ export function createPromptsStorage(db: DB) {
       if (data.role !== undefined) updateFields.role = data.role;
       if (data.enabled !== undefined) updateFields.enabled = String(data.enabled);
       if (data.groupId !== undefined) updateFields.groupId = data.groupId;
-      if (data.markerConfig !== undefined) updateFields.markerConfig = data.markerConfig ? JSON.stringify(data.markerConfig) : null;
+      if (data.markerConfig !== undefined)
+        updateFields.markerConfig = data.markerConfig ? JSON.stringify(data.markerConfig) : null;
       if (data.injectionPosition !== undefined) updateFields.injectionPosition = data.injectionPosition;
       if (data.injectionDepth !== undefined) updateFields.injectionDepth = data.injectionDepth;
       if (data.injectionOrder !== undefined) updateFields.injectionOrder = data.injectionOrder;
@@ -319,26 +319,45 @@ export function createPromptsStorage(db: DB) {
     async reorderSections(presetId: string, sectionIds: string[]) {
       await this.update(presetId, { sectionOrder: sectionIds });
       for (let i = 0; i < sectionIds.length; i++) {
-        await db.update(promptSections).set({ injectionOrder: i * 100 }).where(eq(promptSections.id, sectionIds[i]!));
+        await db
+          .update(promptSections)
+          .set({ injectionOrder: i * 100 })
+          .where(eq(promptSections.id, sectionIds[i]!));
       }
     },
 
     // ═══════════════════════════════════════════
-    //  Choice Blocks
+    //  Choice Blocks (Preset Variables)
     // ═══════════════════════════════════════════
 
-    async getChoiceBlock(sectionId: string) {
-      const rows = await db.select().from(choiceBlocks).where(eq(choiceBlocks.sectionId, sectionId));
+    async listChoiceBlocksForPreset(presetId: string) {
+      return db
+        .select()
+        .from(choiceBlocks)
+        .where(eq(choiceBlocks.presetId, presetId))
+        .orderBy(asc(choiceBlocks.sortOrder));
+    },
+
+    async getChoiceBlock(id: string) {
+      const rows = await db.select().from(choiceBlocks).where(eq(choiceBlocks.id, id));
       return rows[0] ?? null;
     },
 
     async createChoiceBlock(input: CreateChoiceBlockInput) {
       const id = newId();
+      // Set sortOrder to be after existing variables
+      const existing = await db.select().from(choiceBlocks).where(eq(choiceBlocks.presetId, input.presetId));
+      const maxOrder = existing.reduce((max, v) => Math.max(max, v.sortOrder ?? 0), 0);
       await db.insert(choiceBlocks).values({
         id,
-        sectionId: input.sectionId,
-        label: input.label,
+        presetId: input.presetId,
+        variableName: input.variableName,
+        question: input.question,
         options: JSON.stringify(input.options),
+        multiSelect: String(input.multiSelect ?? false),
+        separator: input.separator ?? ", ",
+        randomPick: String(input.randomPick ?? false),
+        sortOrder: maxOrder + 100,
         createdAt: now(),
       });
       const rows = await db.select().from(choiceBlocks).where(eq(choiceBlocks.id, id));
@@ -347,8 +366,12 @@ export function createPromptsStorage(db: DB) {
 
     async updateChoiceBlock(id: string, data: UpdateChoiceBlockInput) {
       const updateFields: Record<string, unknown> = {};
-      if (data.label !== undefined) updateFields.label = data.label;
+      if (data.variableName !== undefined) updateFields.variableName = data.variableName;
+      if (data.question !== undefined) updateFields.question = data.question;
       if (data.options !== undefined) updateFields.options = JSON.stringify(data.options);
+      if (data.multiSelect !== undefined) updateFields.multiSelect = String(data.multiSelect);
+      if (data.separator !== undefined) updateFields.separator = data.separator;
+      if (data.randomPick !== undefined) updateFields.randomPick = String(data.randomPick);
       await db.update(choiceBlocks).set(updateFields).where(eq(choiceBlocks.id, id));
       const rows = await db.select().from(choiceBlocks).where(eq(choiceBlocks.id, id));
       return rows[0] ?? null;
@@ -358,14 +381,13 @@ export function createPromptsStorage(db: DB) {
       await db.delete(choiceBlocks).where(eq(choiceBlocks.id, id));
     },
 
-    async listChoiceBlocksForPreset(presetId: string) {
-      const sections = await this.listSections(presetId);
-      const results: Array<typeof choiceBlocks.$inferSelect> = [];
-      for (const s of sections) {
-        const cb = await this.getChoiceBlock(s.id);
-        if (cb) results.push(cb);
+    async reorderVariables(presetId: string, variableIds: string[]) {
+      for (let i = 0; i < variableIds.length; i++) {
+        await db
+          .update(choiceBlocks)
+          .set({ sortOrder: i * 100 })
+          .where(eq(choiceBlocks.id, variableIds[i]!));
       }
-      return results;
     },
   };
 }

@@ -10,12 +10,18 @@ import type { RegexPlacement } from "@rpg-engine/shared";
  */
 function parseScript(row: RegexScriptRow) {
   const placements: RegexPlacement[] = (() => {
-    try { return JSON.parse(row.placement); }
-    catch { return ["ai_output"]; }
+    try {
+      return JSON.parse(row.placement);
+    } catch {
+      return ["ai_output"];
+    }
   })();
   const trimStrings: string[] = (() => {
-    try { return JSON.parse(row.trimStrings); }
-    catch { return []; }
+    try {
+      return JSON.parse(row.trimStrings);
+    } catch {
+      return [];
+    }
   })();
   return {
     ...row,
@@ -58,7 +64,7 @@ function applyScripts(
 
 /**
  * Hook that provides functions to apply regex transformations.
- * 
+ *
  * Usage:
  *   const { applyToAIOutput, applyToUserInput } = useApplyRegex();
  *   const displayText = applyToAIOutput(message.content);

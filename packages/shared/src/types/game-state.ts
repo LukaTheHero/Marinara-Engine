@@ -26,6 +26,13 @@ export interface GameState {
   // ── Player ──
   playerStats: PlayerStats | null;
 
+  // ── Persona ──
+  /** Persona status bars (Satiety, Energy, etc.) — tracked by persona-stats agent */
+  personaStats: CharacterStat[] | null;
+
+  /** Whether this snapshot has been committed (user sent a follow-up message). */
+  committed?: boolean;
+
   createdAt: string;
 }
 
@@ -35,7 +42,12 @@ export interface PresentCharacter {
   name: string;
   emoji: string;
   mood: string;
-  action: string;
+  /** @deprecated No longer tracked — kept for backward compat */
+  action?: string;
+  /** Brief physical appearance description */
+  appearance: string | null;
+  /** Current clothing / outfit description */
+  outfit: string | null;
   /** Per-character custom fields */
   customFields: Record<string, string>;
   /** Per-character stats (HP, etc.) */

@@ -15,7 +15,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { ...init?.headers as Record<string, string> };
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string>) };
   // Only set Content-Type for requests that have a body
   if (init?.body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -59,6 +59,27 @@ export const api = {
 
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 
+  /** Download a JSON endpoint as a file (triggers browser save-as). */
+  download: async (path: string, fallbackFilename = "export.json") => {
+    const res = await fetch(`${BASE}${path}`);
+    if (!res.ok) throw new ApiError(res.status, "Download failed");
+    const disposition = res.headers.get("Content-Disposition");
+    let filename = fallbackFilename;
+    if (disposition) {
+      const match = disposition.match(/filename="?([^";\n]+)"?/);
+      if (match?.[1]) filename = decodeURIComponent(match[1]);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
   /**
    * Stream an SSE endpoint. Returns an async iterable of parsed events.
    */
@@ -97,6 +118,53 @@ export const api = {
           } catch (e) {
             // If not JSON, yield as raw text
             if (!(e instanceof ApiError)) yield data;
+          }
+        }
+      }
+    }
+  },
+
+  /**
+   * Stream an SSE endpoint. Returns an async iterable of all typed events.
+   * Unlike `stream()`, this does NOT filter to only token events.
+   */
+  streamEvents: async function* (path: string, body?: unknown): AsyncGenerator<{ type: string; data: unknown }> {
+    const res = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+
+    if (!res.ok || !res.body) {
+      throw new ApiError(res.status, "Stream failed");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") return;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.type === "error") {
+              throw new ApiError(500, parsed.data ?? "Generation error");
+            }
+            yield parsed;
+          } catch (e) {
+            if (e instanceof ApiError) throw e;
+            // Non-JSON — yield as raw token
+            yield { type: "token", data };
           }
         }
       }

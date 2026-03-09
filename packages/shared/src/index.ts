@@ -14,6 +14,7 @@ export * from "./types/combat-encounter.js";
 export * from "./types/vn.js";
 export * from "./types/persona.js";
 export * from "./types/regex.js";
+export * from "./types/export.js";
 
 // Schemas
 export * from "./schemas/chat.schema.js";

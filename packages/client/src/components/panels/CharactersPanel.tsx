@@ -59,9 +59,8 @@ export function CharactersPanel() {
   const [assigningToGroup, setAssigningToGroup] = useState<string | null>(null);
 
   const chatCharacterIds: string[] = activeChat
-    ? (typeof activeChat.characterIds === "string"
-        ? JSON.parse(activeChat.characterIds)
-        : activeChat.characterIds) ?? []
+    ? ((typeof activeChat.characterIds === "string" ? JSON.parse(activeChat.characterIds) : activeChat.characterIds) ??
+      [])
     : [];
 
   // Parse character data and filter by search
@@ -100,16 +99,20 @@ export function CharactersPanel() {
     if (!groups) return [];
     return (groups as GroupRow[]).map((g) => ({
       ...g,
-      memberIds: (() => { try { return JSON.parse(g.characterIds); } catch { return []; } })() as string[],
+      memberIds: (() => {
+        try {
+          return JSON.parse(g.characterIds);
+        } catch {
+          return [];
+        }
+      })() as string[],
     }));
   }, [groups]);
 
   const toggleCharacter = (charId: string) => {
     if (!activeChat) return;
     const isActive = chatCharacterIds.includes(charId);
-    const newIds = isActive
-      ? chatCharacterIds.filter((id: string) => id !== charId)
-      : [...chatCharacterIds, charId];
+    const newIds = isActive ? chatCharacterIds.filter((id: string) => id !== charId) : [...chatCharacterIds, charId];
     if (newIds.length === 0) return;
     updateChat.mutate({ id: activeChat.id, characterIds: newIds });
   };
@@ -128,21 +131,25 @@ export function CharactersPanel() {
     setCreatingGroup(false);
   }, [newGroupName, createGroup]);
 
-  const handleRenameGroup = useCallback((groupId: string) => {
-    const name = editGroupName.trim();
-    if (!name) return;
-    updateGroup.mutate({ id: groupId, name });
-    setEditingGroupId(null);
-    setEditGroupName("");
-  }, [editGroupName, updateGroup]);
+  const handleRenameGroup = useCallback(
+    (groupId: string) => {
+      const name = editGroupName.trim();
+      if (!name) return;
+      updateGroup.mutate({ id: groupId, name });
+      setEditingGroupId(null);
+      setEditGroupName("");
+    },
+    [editGroupName, updateGroup],
+  );
 
-  const toggleGroupMember = useCallback((groupId: string, charId: string, currentMembers: string[]) => {
-    const isMember = currentMembers.includes(charId);
-    const newMembers = isMember
-      ? currentMembers.filter((id) => id !== charId)
-      : [...currentMembers, charId];
-    updateGroup.mutate({ id: groupId, characterIds: newMembers });
-  }, [updateGroup]);
+  const toggleGroupMember = useCallback(
+    (groupId: string, charId: string, currentMembers: string[]) => {
+      const isMember = currentMembers.includes(charId);
+      const newMembers = isMember ? currentMembers.filter((id) => id !== charId) : [...currentMembers, charId];
+      updateGroup.mutate({ id: groupId, characterIds: newMembers });
+    },
+    [updateGroup],
+  );
 
   return (
     <div className="flex flex-col gap-2 p-3">
@@ -192,7 +199,10 @@ export function CharactersPanel() {
             Groups ({parsedGroups.length})
           </button>
           <button
-            onClick={() => { setCreatingGroup(true); setGroupsExpanded(true); }}
+            onClick={() => {
+              setCreatingGroup(true);
+              setGroupsExpanded(true);
+            }}
             className="rounded-lg p-1 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--primary)]"
             title="Create group"
           >
@@ -210,12 +220,29 @@ export function CharactersPanel() {
                   autoFocus
                   value={newGroupName}
                   onChange={(e) => setNewGroupName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCreateGroup(); if (e.key === "Escape") setCreatingGroup(false); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateGroup();
+                    if (e.key === "Escape") setCreatingGroup(false);
+                  }}
                   placeholder="Group name…"
                   className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[var(--muted-foreground)]/50"
                 />
-                <button onClick={handleCreateGroup} disabled={!newGroupName.trim()} className="rounded-md p-0.5 text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-30"><Check size={13} /></button>
-                <button onClick={() => { setCreatingGroup(false); setNewGroupName(""); }} className="rounded-md p-0.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)]"><X size={13} /></button>
+                <button
+                  onClick={handleCreateGroup}
+                  disabled={!newGroupName.trim()}
+                  className="rounded-md p-0.5 text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-30"
+                >
+                  <Check size={13} />
+                </button>
+                <button
+                  onClick={() => {
+                    setCreatingGroup(false);
+                    setNewGroupName("");
+                  }}
+                  className="rounded-md p-0.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+                >
+                  <X size={13} />
+                </button>
               </div>
             )}
 
@@ -225,7 +252,10 @@ export function CharactersPanel() {
               const isAssigning = assigningToGroup === group.id;
 
               return (
-                <div key={group.id} className="rounded-xl border border-transparent transition-all hover:border-[var(--border)]/50">
+                <div
+                  key={group.id}
+                  className="rounded-xl border border-transparent transition-all hover:border-[var(--border)]/50"
+                >
                   {/* Group header */}
                   <div
                     className="group flex items-center gap-2.5 rounded-xl p-2 transition-all hover:bg-[var(--sidebar-accent)] cursor-pointer"
@@ -240,7 +270,10 @@ export function CharactersPanel() {
                           autoFocus
                           value={editGroupName}
                           onChange={(e) => setEditGroupName(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") handleRenameGroup(group.id); if (e.key === "Escape") setEditingGroupId(null); }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRenameGroup(group.id);
+                            if (e.key === "Escape") setEditingGroupId(null);
+                          }}
                           onClick={(e) => e.stopPropagation()}
                           className="w-full bg-transparent text-xs font-medium outline-none ring-1 ring-[var(--primary)]/30 rounded px-1 py-0.5"
                         />
@@ -256,7 +289,10 @@ export function CharactersPanel() {
                     <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-all group-hover:opacity-100">
                       {activeChat && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); addGroupToChat(group.memberIds); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addGroupToChat(group.memberIds);
+                          }}
                           className="rounded-lg p-1 transition-all hover:bg-[var(--accent)]"
                           title="Add all to chat"
                         >
@@ -264,21 +300,34 @@ export function CharactersPanel() {
                         </button>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); setAssigningToGroup(isAssigning ? null : group.id); }}
-                        className={cn("rounded-lg p-1 transition-all hover:bg-[var(--accent)]", isAssigning && "bg-[var(--primary)]/15 text-[var(--primary)]")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAssigningToGroup(isAssigning ? null : group.id);
+                        }}
+                        className={cn(
+                          "rounded-lg p-1 transition-all hover:bg-[var(--accent)]",
+                          isAssigning && "bg-[var(--primary)]/15 text-[var(--primary)]",
+                        )}
                         title={isAssigning ? "Done assigning" : "Add/remove members"}
                       >
                         <Users size={11} />
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setEditingGroupId(group.id); setEditGroupName(group.name); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingGroupId(group.id);
+                          setEditGroupName(group.name);
+                        }}
                         className="rounded-lg p-1 transition-all hover:bg-[var(--accent)]"
                         title="Rename group"
                       >
                         <Pencil size={11} />
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteGroup.mutate(group.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteGroup.mutate(group.id);
+                        }}
                         className="rounded-lg p-1 transition-all hover:bg-[var(--destructive)]/15"
                         title="Delete group"
                       >
@@ -299,7 +348,10 @@ export function CharactersPanel() {
                         const member = charMap.get(memberId);
                         if (!member) return null;
                         return (
-                          <div key={memberId} className="group/member flex items-center gap-2 rounded-lg p-1.5 transition-all hover:bg-[var(--sidebar-accent)]">
+                          <div
+                            key={memberId}
+                            className="group/member flex items-center gap-2 rounded-lg p-1.5 transition-all hover:bg-[var(--sidebar-accent)]"
+                          >
                             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg overflow-hidden bg-gradient-to-br from-pink-400 to-rose-500 text-white">
                               {member.avatarPath ? (
                                 <img src={member.avatarPath} alt={member.name} className="h-full w-full object-cover" />
@@ -309,7 +361,10 @@ export function CharactersPanel() {
                             </div>
                             <span className="flex-1 truncate text-[11px]">{member.name}</span>
                             <button
-                              onClick={(e) => { e.stopPropagation(); toggleGroupMember(group.id, memberId, group.memberIds); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleGroupMember(group.id, memberId, group.memberIds);
+                              }}
                               className="rounded p-0.5 opacity-0 transition-all hover:bg-[var(--destructive)]/15 group-hover/member:opacity-100"
                               title="Remove from group"
                             >
@@ -337,8 +392,13 @@ export function CharactersPanel() {
       {assigningToGroup && (
         <div className="flex items-center gap-2 rounded-xl bg-[var(--primary)]/10 px-3 py-2 text-xs ring-1 ring-[var(--primary)]/30">
           <Users size={13} className="text-[var(--primary)]" />
-          <span className="flex-1">Click characters to add/remove from <strong>{parsedGroups.find((g) => g.id === assigningToGroup)?.name}</strong></span>
-          <button onClick={() => setAssigningToGroup(null)} className="rounded p-0.5 hover:bg-[var(--accent)]"><X size={13} /></button>
+          <span className="flex-1">
+            Click characters to add/remove from{" "}
+            <strong>{parsedGroups.find((g) => g.id === assigningToGroup)?.name}</strong>
+          </span>
+          <button onClick={() => setAssigningToGroup(null)} className="rounded p-0.5 hover:bg-[var(--accent)]">
+            <X size={13} />
+          </button>
         </div>
       )}
 
@@ -362,9 +422,7 @@ export function CharactersPanel() {
           <div className="animate-float flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-400/20 to-rose-500/20">
             <User size={20} className="text-[var(--primary)]" />
           </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {search ? "No matches found" : "No characters yet"}
-          </p>
+          <p className="text-xs text-[var(--muted-foreground)]">{search ? "No matches found" : "No characters yet"}</p>
         </div>
       )}
 
@@ -397,11 +455,9 @@ export function CharactersPanel() {
               )}
             >
               {/* Avatar */}
-              <div
-                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden bg-gradient-to-br from-pink-400 to-rose-500 text-white shadow-sm"
-              >
+              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-pink-400 to-rose-500 text-white shadow-sm">
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt={charName} className="h-full w-full object-cover" />
+                  <img src={avatarUrl} alt={charName} className="h-full w-full rounded-xl object-cover" />
                 ) : (
                   <User size={16} />
                 )}
@@ -424,7 +480,12 @@ export function CharactersPanel() {
                   style={
                     charNameColor
                       ? charNameColor.startsWith("linear-gradient")
-                        ? { background: charNameColor, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+                        ? {
+                            background: charNameColor,
+                            WebkitBackgroundClip: "text",
+                            WebkitTextFillColor: "transparent",
+                            backgroundClip: "text",
+                          }
                         : { color: charNameColor }
                       : undefined
                   }
@@ -433,8 +494,10 @@ export function CharactersPanel() {
                 </div>
                 <div className="truncate text-[10px] text-[var(--muted-foreground)]">
                   {assigningToGroup
-                    ? (isInTargetGroup ? "In group — click to remove" : "Click to add to group")
-                    : (charDesc.slice(0, 60) || "No description")}
+                    ? isInTargetGroup
+                      ? "In group — click to remove"
+                      : "Click to add to group"
+                    : charDesc.slice(0, 60) || "No description"}
                 </div>
               </div>
 
@@ -443,18 +506,26 @@ export function CharactersPanel() {
                 <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-all group-hover:opacity-100">
                   {activeChat && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); toggleCharacter(char.id); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCharacter(char.id);
+                      }}
                       className={cn(
-                        "rounded-lg p-1.5 transition-all hover:bg-[var(--accent)]",
-                        isSelected && "text-[var(--primary)]",
+                        "rounded-lg p-1.5 transition-all",
+                        isSelected
+                          ? "text-[var(--destructive)] hover:bg-[var(--destructive)]/15"
+                          : "hover:bg-[var(--accent)] text-[var(--primary)]",
                       )}
                       title={isSelected ? "Remove from chat" : "Add to chat"}
                     >
-                      <Check size={12} />
+                      {isSelected ? <X size={12} /> : <Check size={12} />}
                     </button>
                   )}
                   <button
-                    onClick={(e) => { e.stopPropagation(); deleteCharacter.mutate(char.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCharacter.mutate(char.id);
+                    }}
                     className="rounded-lg p-1.5 transition-all hover:bg-[var(--destructive)]/15"
                     title="Delete character"
                   >

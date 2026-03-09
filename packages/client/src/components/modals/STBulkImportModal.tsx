@@ -156,8 +156,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
         {(phase === "input" || phase === "scanning") && (
           <>
             <p className="text-xs text-[var(--muted-foreground)]">
-              Select or enter the path to your SillyTavern installation folder. We'll scan for characters,
-              chats, presets, lorebooks, and backgrounds to import.
+              Select or enter the path to your SillyTavern installation folder. We'll scan for characters, chats,
+              presets, lorebooks, and backgrounds to import.
             </p>
 
             <div className="flex flex-col gap-1.5">
@@ -196,11 +196,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   : "bg-[var(--secondary)] text-[var(--muted-foreground)] opacity-50 cursor-not-allowed",
               )}
             >
-              {phase === "scanning" ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <FolderSearch size={14} />
-              )}
+              {phase === "scanning" ? <Loader2 size={14} className="animate-spin" /> : <FolderSearch size={14} />}
               {phase === "scanning" ? "Scanning…" : "Scan Folder"}
             </button>
 
@@ -214,8 +210,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
             <div className="rounded-lg bg-[var(--secondary)]/50 p-2.5 text-[10px] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
               <strong>Tip:</strong> This is the main SillyTavern folder (the one containing{" "}
               <code className="rounded bg-[var(--secondary)] px-1">data/</code> or{" "}
-              <code className="rounded bg-[var(--secondary)] px-1">public/</code>).
-              On most setups it's named <code className="rounded bg-[var(--secondary)] px-1">SillyTavern</code>.
+              <code className="rounded bg-[var(--secondary)] px-1">public/</code>). On most setups it's named{" "}
+              <code className="rounded bg-[var(--secondary)] px-1">SillyTavern</code>.
             </div>
           </>
         )}
@@ -226,7 +222,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
             <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 p-2.5 text-xs text-emerald-400">
               <CheckCircle size={14} />
               <span>
-                Found ST data in <code className="rounded bg-[var(--secondary)] px-1 text-[10px]">{scanResult.dataDir}</code>
+                Found ST data in{" "}
+                <code className="rounded bg-[var(--secondary)] px-1 text-[10px]">{scanResult.dataDir}</code>
               </span>
             </div>
 
@@ -306,7 +303,15 @@ export function STBulkImportModal({ open, onClose }: Props) {
               </button>
               <button
                 onClick={handleImport}
-                disabled={!options.characters && !options.chats && !options.groupChats && !options.presets && !options.lorebooks && !options.backgrounds && !options.personas}
+                disabled={
+                  !options.characters &&
+                  !options.chats &&
+                  !options.groupChats &&
+                  !options.presets &&
+                  !options.lorebooks &&
+                  !options.backgrounds &&
+                  !options.personas
+                }
                 className={cn(
                   "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all active:scale-95",
                   "bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90",
@@ -331,15 +336,17 @@ export function STBulkImportModal({ open, onClose }: Props) {
         {/* ── Phase: Done ── */}
         {phase === "done" && importResult && (
           <>
-            <div className={cn(
-              "flex items-center gap-2 rounded-lg p-3 text-xs",
-              importResult.success
-                ? "bg-emerald-500/10 text-emerald-400"
-                : "bg-[var(--destructive)]/10 text-[var(--destructive)]",
-            )}>
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg p-3 text-xs",
+                importResult.success
+                  ? "bg-emerald-500/10 text-emerald-400"
+                  : "bg-[var(--destructive)]/10 text-[var(--destructive)]",
+              )}
+            >
               {importResult.success ? <CheckCircle size={14} /> : <XCircle size={14} />}
               <span className="font-medium">
-                {importResult.success ? "Import complete!" : importResult.error ?? "Import failed"}
+                {importResult.success ? "Import complete!" : (importResult.error ?? "Import failed")}
               </span>
             </div>
 
@@ -347,11 +354,19 @@ export function STBulkImportModal({ open, onClose }: Props) {
               <div className="grid grid-cols-2 gap-2">
                 <StatCard icon={<Users size={14} />} label="Characters" count={importResult.imported.characters} />
                 <StatCard icon={<MessageSquare size={14} />} label="Chats" count={importResult.imported.chats} />
-                <StatCard icon={<Users size={14} />} label="Group Chats" count={importResult.imported.groupChats ?? 0} />
+                <StatCard
+                  icon={<Users size={14} />}
+                  label="Group Chats"
+                  count={importResult.imported.groupChats ?? 0}
+                />
                 <StatCard icon={<FileText size={14} />} label="Presets" count={importResult.imported.presets} />
                 <StatCard icon={<BookOpen size={14} />} label="Lorebooks" count={importResult.imported.lorebooks} />
                 <StatCard icon={<Image size={14} />} label="Backgrounds" count={importResult.imported.backgrounds} />
-                <StatCard icon={<UserCircle size={14} />} label="Personas" count={importResult.imported.personas ?? 0} />
+                <StatCard
+                  icon={<UserCircle size={14} />}
+                  label="Personas"
+                  count={importResult.imported.personas ?? 0}
+                />
               </div>
             )}
 
@@ -363,7 +378,9 @@ export function STBulkImportModal({ open, onClose }: Props) {
                 </div>
                 <div className="max-h-24 overflow-y-auto text-[10px] text-[var(--muted-foreground)]">
                   {importResult.errors.map((err, i) => (
-                    <div key={i} className="py-0.5">{err}</div>
+                    <div key={i} className="py-0.5">
+                      {err}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -415,15 +432,15 @@ function ImportCategory({
         />
         <span className={cn("text-[var(--muted-foreground)]", count === 0 && "opacity-40")}>{icon}</span>
         <span className="flex-1 text-xs font-medium">
-          {label}{" "}
-          <span className={cn("text-[var(--muted-foreground)]", count === 0 && "opacity-40")}>
-            ({count})
-          </span>
+          {label} <span className={cn("text-[var(--muted-foreground)]", count === 0 && "opacity-40")}>({count})</span>
         </span>
         {count > 0 && (
           <button
             type="button"
-            onClick={(e) => { e.preventDefault(); setExpanded(!expanded); }}
+            onClick={(e) => {
+              e.preventDefault();
+              setExpanded(!expanded);
+            }}
             className="text-[10px] text-[var(--primary)] hover:underline"
           >
             {expanded ? "Hide" : "Show"}
@@ -438,9 +455,7 @@ function ImportCategory({
             </div>
           ))}
           {remaining > 0 && (
-            <div className="py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
-              … and {remaining} more
-            </div>
+            <div className="py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">… and {remaining} more</div>
           )}
         </div>
       )}

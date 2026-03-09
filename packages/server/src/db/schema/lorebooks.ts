@@ -22,7 +22,9 @@ export const lorebooks = sqliteTable("lorebooks", {
 
 export const lorebookEntries = sqliteTable("lorebook_entries", {
   id: text("id").primaryKey(),
-  lorebookId: text("lorebook_id").notNull().references(() => lorebooks.id, { onDelete: "cascade" }),
+  lorebookId: text("lorebook_id")
+    .notNull()
+    .references(() => lorebooks.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   content: text("content").notNull().default(""),
   /** JSON array of primary keywords */
@@ -33,7 +35,9 @@ export const lorebookEntries = sqliteTable("lorebook_entries", {
   enabled: text("enabled").notNull().default("true"),
   constant: text("constant").notNull().default("false"),
   selective: text("selective").notNull().default("false"),
-  selectiveLogic: text("selective_logic", { enum: ["and", "or", "not"] }).notNull().default("and"),
+  selectiveLogic: text("selective_logic", { enum: ["and", "or", "not"] })
+    .notNull()
+    .default("and"),
   probability: integer("probability"),
   scanDepth: integer("scan_depth"),
   matchWholeWords: text("match_whole_words").notNull().default("false"),
@@ -43,7 +47,9 @@ export const lorebookEntries = sqliteTable("lorebook_entries", {
   position: integer("position").notNull().default(0),
   depth: integer("depth").notNull().default(4),
   order: integer("order").notNull().default(100),
-  role: text("role", { enum: ["system", "user", "assistant"] }).notNull().default("system"),
+  role: text("role", { enum: ["system", "user", "assistant"] })
+    .notNull()
+    .default("system"),
 
   sticky: integer("sticky"),
   cooldown: integer("cooldown"),

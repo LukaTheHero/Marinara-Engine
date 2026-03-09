@@ -5,6 +5,12 @@
 /** The three primary chat modes the engine supports. */
 export type ChatMode = "conversation" | "roleplay" | "visual_novel";
 
+/** How a multi-character (group) chat is handled. */
+export type GroupChatMode = "merged" | "individual";
+
+/** How individual-mode group chats decide response order. */
+export type GroupResponseOrder = "sequential" | "smart";
+
 /** Role of a message in the conversation. */
 export type MessageRole = "user" | "assistant" | "system" | "narrator";
 
@@ -31,11 +37,17 @@ export interface ChatMetadata {
   /** Custom tags for organisation */
   tags: string[];
   /** Whether agents are enabled for this chat */
-  agentsEnabled: boolean;
+  enableAgents: boolean;
   /** Per-agent enable overrides (agentId → boolean) */
   agentOverrides: Record<string, boolean>;
-  /** Per-chat choice selections for preset choice blocks (sectionId → choiceOptionId) */
-  presetChoices: Record<string, string>;
+  /** Per-chat variable selections for preset variables (variableName → value or values) */
+  presetChoices: Record<string, string | string[]>;
+  /** Group chat mode: "merged" (narrator) or "individual" (separate characters) */
+  groupChatMode?: GroupChatMode;
+  /** Group individual mode: color dialogues with speaker tags */
+  groupSpeakerColors?: boolean;
+  /** Group individual mode response order: "sequential" or "smart" (agent-decided) */
+  groupResponseOrder?: GroupResponseOrder;
   /** Any extra key-value data */
   [key: string]: unknown;
 }
@@ -50,6 +62,8 @@ export interface Message {
   content: string;
   /** Index into the swipes array for the currently displayed alternative */
   activeSwipeIndex: number;
+  /** Number of swipes for this message (0 or 1 = no alternatives) */
+  swipeCount?: number;
   createdAt: string;
   /** Extra display data */
   extra: MessageExtra;
@@ -65,6 +79,10 @@ export interface MessageExtra {
   tokenCount: number | null;
   /** Generation metadata */
   generationInfo: GenerationInfo | null;
+  /** When true, this message marks the "new start" of the conversation — all earlier messages are excluded from context */
+  isConversationStart?: boolean;
+  /** Model's reasoning/thinking content (if available) */
+  thinking?: string | null;
 }
 
 /** Metadata about how a message was generated. */

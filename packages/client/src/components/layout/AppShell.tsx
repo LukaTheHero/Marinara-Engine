@@ -14,6 +14,7 @@ import { RegexScriptEditor } from "../agents/RegexScriptEditor";
 import { RightPanel } from "./RightPanel";
 import { TopBar } from "./TopBar";
 import { OnboardingTutorial } from "../onboarding/OnboardingTutorial";
+import { EchoChamberPanel } from "../chat/EchoChamberPanel";
 import { useUIStore } from "../../stores/ui.store";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -36,11 +37,11 @@ export function AppShell() {
   return (
     <div className="retro-scanlines noise-bg geometric-grid flex h-screen w-screen max-w-[100vw] overflow-hidden bg-[var(--background)]">
       {/* Y2K decorative stars */}
-      <div className="y2k-star hidden md:block" style={{ top: '10%', left: '5%', animationDelay: '0s' }} />
-      <div className="y2k-star-md hidden md:block" style={{ top: '25%', right: '8%', animationDelay: '1.5s' }} />
-      <div className="y2k-star-lg hidden md:block" style={{ top: '60%', left: '3%', animationDelay: '3s' }} />
-      <div className="y2k-star hidden md:block" style={{ top: '80%', right: '12%', animationDelay: '0.8s' }} />
-      <div className="y2k-star-md hidden md:block" style={{ top: '45%', left: '50%', animationDelay: '2.2s' }} />
+      <div className="y2k-star hidden md:block" style={{ top: "10%", left: "5%", animationDelay: "0s" }} />
+      <div className="y2k-star-md hidden md:block" style={{ top: "25%", right: "8%", animationDelay: "1.5s" }} />
+      <div className="y2k-star-lg hidden md:block" style={{ top: "60%", left: "3%", animationDelay: "3s" }} />
+      <div className="y2k-star hidden md:block" style={{ top: "80%", right: "12%", animationDelay: "0.8s" }} />
+      <div className="y2k-star-md hidden md:block" style={{ top: "45%", left: "50%", animationDelay: "2.2s" }} />
 
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
@@ -54,7 +55,7 @@ export function AppShell() {
       <aside
         data-tour="sidebar"
         className={cn(
-          "flex-shrink-0 overflow-hidden border-r border-[var(--sidebar-border)] bg-[var(--sidebar)] transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "flex-shrink-0 overflow-hidden border-r border-[var(--sidebar-border)]/30 bg-[var(--background)]/80 backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
           // Mobile: fixed overlay
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-2xl",
           !sidebarOpen && "max-md:!w-0",
@@ -69,15 +70,30 @@ export function AppShell() {
       {/* Center content */}
       <div data-tour="chat-area" className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
-        {regexDetailId ? <RegexScriptEditor /> : personaDetailId ? <PersonaEditor /> : toolDetailId ? <ToolEditor /> : agentDetailId ? <AgentEditor /> : connectionDetailId ? <ConnectionEditor /> : presetDetailId ? <PresetEditor /> : characterDetailId ? <CharacterEditor /> : lorebookDetailId ? <LorebookEditor /> : <ChatArea />}
+        {regexDetailId ? (
+          <RegexScriptEditor />
+        ) : personaDetailId ? (
+          <PersonaEditor />
+        ) : toolDetailId ? (
+          <ToolEditor />
+        ) : agentDetailId ? (
+          <AgentEditor />
+        ) : connectionDetailId ? (
+          <ConnectionEditor />
+        ) : presetDetailId ? (
+          <PresetEditor />
+        ) : characterDetailId ? (
+          <CharacterEditor />
+        ) : lorebookDetailId ? (
+          <LorebookEditor />
+        ) : (
+          <ChatArea />
+        )}
       </div>
 
       {/* Mobile right panel backdrop */}
       {rightPanelOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
-          onClick={() => closeRightPanel()}
-        />
+        <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden" onClick={() => closeRightPanel()} />
       )}
 
       {/* Right panel - Context / Settings */}
@@ -89,8 +105,8 @@ export function AppShell() {
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: "spring", damping: 28, stiffness: 350 }}
             className={cn(
-              "flex-shrink-0 overflow-hidden border-l border-[var(--sidebar-border)] bg-[var(--sidebar)]",
-              // Mobile: fixed full-width overlay  
+              "flex-shrink-0 overflow-hidden border-l border-[var(--sidebar-border)]/30 bg-[var(--background)]/80 backdrop-blur-xl",
+              // Mobile: fixed full-width overlay
               "max-md:!fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:!w-full max-md:max-w-[100vw] max-md:shadow-2xl",
             )}
           >
@@ -103,6 +119,9 @@ export function AppShell() {
 
       {/* First-time onboarding tutorial */}
       <OnboardingTutorial />
+
+      {/* Echo Chamber — Twitch-style chat reactions panel */}
+      <EchoChamberPanel />
     </div>
   );
 }

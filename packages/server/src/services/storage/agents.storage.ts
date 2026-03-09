@@ -1,16 +1,27 @@
 // ──────────────────────────────────────────────
-// Storage: Agent Configs
+// Storage: Agent Configs, Runs & Memory
 // ──────────────────────────────────────────────
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { DB } from "../../db/connection.js";
-import { agentConfigs } from "../../db/schema/index.js";
+import { agentConfigs, agentRuns, agentMemory } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
-import type { CreateAgentConfigInput } from "@rpg-engine/shared";
+import type { CreateAgentConfigInput, AgentResult } from "@rpg-engine/shared";
 
 export function createAgentsStorage(db: DB) {
   return {
+    // ── Config CRUD ──
+
     async list() {
       return db.select().from(agentConfigs).orderBy(desc(agentConfigs.updatedAt));
+    },
+
+    async listEnabled() {
+      const rows = await db
+        .select()
+        .from(agentConfigs)
+        .where(eq(agentConfigs.enabled, "true"))
+        .orderBy(desc(agentConfigs.updatedAt));
+      return rows;
     },
 
     async getById(id: string) {
@@ -57,6 +68,70 @@ export function createAgentsStorage(db: DB) {
 
     async remove(id: string) {
       await db.delete(agentConfigs).where(eq(agentConfigs.id, id));
+    },
+
+    // ── Agent Runs ──
+
+    async saveRun(input: { agentConfigId: string; chatId: string; messageId: string; result: AgentResult }) {
+      const id = newId();
+      await db.insert(agentRuns).values({
+        id,
+        agentConfigId: input.agentConfigId,
+        chatId: input.chatId,
+        messageId: input.messageId,
+        resultType: input.result.type,
+        resultData: JSON.stringify(input.result.data),
+        tokensUsed: input.result.tokensUsed,
+        durationMs: input.result.durationMs,
+        success: String(input.result.success),
+        error: input.result.error,
+        createdAt: now(),
+      });
+      return id;
+    },
+
+    // ── Agent Memory (persistent KV per agent per chat) ──
+
+    async getMemory(agentConfigId: string, chatId: string): Promise<Record<string, unknown>> {
+      const rows = await db
+        .select()
+        .from(agentMemory)
+        .where(and(eq(agentMemory.agentConfigId, agentConfigId), eq(agentMemory.chatId, chatId)));
+      const mem: Record<string, unknown> = {};
+      for (const row of rows) {
+        try {
+          mem[row.key] = JSON.parse(row.value);
+        } catch {
+          mem[row.key] = row.value;
+        }
+      }
+      return mem;
+    },
+
+    async setMemory(agentConfigId: string, chatId: string, key: string, value: unknown) {
+      const stringValue = typeof value === "string" ? value : JSON.stringify(value);
+      const existing = await db
+        .select()
+        .from(agentMemory)
+        .where(
+          and(eq(agentMemory.agentConfigId, agentConfigId), eq(agentMemory.chatId, chatId), eq(agentMemory.key, key)),
+        );
+
+      if (existing.length > 0) {
+        await db
+          .update(agentMemory)
+          .set({ value: stringValue, updatedAt: now() })
+          .where(eq(agentMemory.id, existing[0]!.id));
+      } else {
+        await db.insert(agentMemory).values({
+          id: newId(),
+          agentConfigId,
+          chatId,
+          key,
+          value: stringValue,
+          updatedAt: now(),
+        });
+      }
     },
   };
 }

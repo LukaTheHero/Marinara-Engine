@@ -19,6 +19,7 @@ export function useCharacters() {
   return useQuery({
     queryKey: characterKeys.list(),
     queryFn: () => api.get<unknown[]>("/characters"),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -27,14 +28,14 @@ export function useCharacter(id: string | null) {
     queryKey: characterKeys.detail(id ?? ""),
     queryFn: () => api.get(`/characters/${id}`),
     enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }
 
 export function useCreateCharacter() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      api.post("/characters", data),
+    mutationFn: (data: Record<string, unknown>) => api.post("/characters", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: characterKeys.list() }),
   });
 }
@@ -54,8 +55,7 @@ export function useUpdateCharacter() {
 export function useUploadAvatar() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, avatar }: { id: string; avatar: string }) =>
-      api.post(`/characters/${id}/avatar`, { avatar }),
+    mutationFn: ({ id, avatar }: { id: string; avatar: string }) => api.post(`/characters/${id}/avatar`, { avatar }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: characterKeys.list() });
       qc.invalidateQueries({ queryKey: characterKeys.detail(variables.id) });
@@ -119,14 +119,24 @@ export function usePersonas() {
   return useQuery({
     queryKey: characterKeys.personas,
     queryFn: () => api.get<unknown[]>("/characters/personas/list"),
+    staleTime: 5 * 60_000,
   });
 }
 
 export function useCreatePersona() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; description?: string; personality?: string; scenario?: string; backstory?: string; appearance?: string; nameColor?: string; dialogueColor?: string; boxColor?: string }) =>
-      api.post("/characters/personas", data),
+    mutationFn: (data: {
+      name: string;
+      description?: string;
+      personality?: string;
+      scenario?: string;
+      backstory?: string;
+      appearance?: string;
+      nameColor?: string;
+      dialogueColor?: string;
+      boxColor?: string;
+    }) => api.post("/characters/personas", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: characterKeys.personas }),
   });
 }
@@ -134,8 +144,22 @@ export function useCreatePersona() {
 export function useUpdatePersona() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string; personality?: string; scenario?: string; backstory?: string; appearance?: string; nameColor?: string; dialogueColor?: string; boxColor?: string }) =>
-      api.patch(`/characters/personas/${id}`, data),
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      name?: string;
+      description?: string;
+      personality?: string;
+      scenario?: string;
+      backstory?: string;
+      appearance?: string;
+      nameColor?: string;
+      dialogueColor?: string;
+      boxColor?: string;
+      personaStats?: string;
+    }) => api.patch(`/characters/personas/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: characterKeys.personas }),
   });
 }

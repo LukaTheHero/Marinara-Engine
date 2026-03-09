@@ -64,8 +64,5 @@ export function squashLeadingSystemMessages(messages: ChatMLMessage[]): ChatMLMe
     .map((m) => m.content)
     .join("\n\n");
 
-  return [
-    { role: "system", content: combinedContent },
-    ...messages.slice(systemEnd),
-  ];
+  return [{ role: "system", content: combinedContent }, ...messages.slice(systemEnd)];
 }

@@ -6,7 +6,11 @@ import { z } from "zod";
 export const toolExecutionTypeSchema = z.enum(["webhook", "static", "script"]);
 
 export const createCustomToolSchema = z.object({
-  name: z.string().min(1).max(100).regex(/^[a-z][a-z0-9_]*$/, "Tool name must be lowercase snake_case"),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z][a-z0-9_]*$/, "Tool name must be lowercase snake_case"),
   description: z.string().min(1).max(500),
   parametersSchema: z.record(z.unknown()).default({}),
   executionType: toolExecutionTypeSchema.default("static"),

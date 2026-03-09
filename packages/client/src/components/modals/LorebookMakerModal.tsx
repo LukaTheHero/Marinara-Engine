@@ -7,16 +7,7 @@ import { Modal } from "../ui/Modal";
 import { useConnections } from "../../hooks/use-connections";
 import { useLorebooks, useCreateLorebook } from "../../hooks/use-lorebooks";
 import { useUIStore } from "../../stores/ui.store";
-import {
-  Sparkles,
-  Loader2,
-  Wand2,
-  CheckCircle,
-  AlertCircle,
-  ChevronDown,
-  BookOpen,
-  Plus,
-} from "lucide-react";
+import { Sparkles, Loader2, Wand2, CheckCircle, AlertCircle, ChevronDown, BookOpen, Plus } from "lucide-react";
 import { api } from "../../lib/api-client";
 import type { Lorebook } from "@rpg-engine/shared";
 
@@ -305,18 +296,11 @@ export function LorebookMakerModal({ open, onClose }: Props) {
               </p>
               <div className="max-h-48 space-y-1.5 overflow-y-auto">
                 {generated.entries?.map((entry, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 rounded-lg bg-[var(--secondary)] p-2 text-xs"
-                  >
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-[var(--secondary)] p-2 text-xs">
                     <span className="font-medium">{entry.name}</span>
-                    <span className="text-[var(--muted-foreground)]">
-                      {entry.keys?.slice(0, 3).join(", ")}
-                    </span>
+                    <span className="text-[var(--muted-foreground)]">{entry.keys?.slice(0, 3).join(", ")}</span>
                     {entry.tag && (
-                      <span className="ml-auto rounded bg-[var(--accent)] px-1.5 py-0.5 text-[9px]">
-                        {entry.tag}
-                      </span>
+                      <span className="ml-auto rounded bg-[var(--accent)] px-1.5 py-0.5 text-[9px]">{entry.tag}</span>
                     )}
                   </div>
                 ))}

@@ -114,31 +114,28 @@ function normalizeV2(raw: Record<string, unknown>): CharacterData {
     tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
     creator: String(raw.creator ?? ""),
     character_version: String(raw.character_version ?? ""),
-    alternate_greetings: Array.isArray(raw.alternate_greetings)
-      ? raw.alternate_greetings.map(String)
-      : [],
+    alternate_greetings: Array.isArray(raw.alternate_greetings) ? raw.alternate_greetings.map(String) : [],
     extensions: {
-      talkativeness: Number(
-        (raw.extensions as Record<string, unknown>)?.talkativeness ?? 0.5,
-      ),
+      talkativeness: Number((raw.extensions as Record<string, unknown>)?.talkativeness ?? 0.5),
       fav: Boolean((raw.extensions as Record<string, unknown>)?.fav),
       world: String((raw.extensions as Record<string, unknown>)?.world ?? ""),
       depth_prompt: {
         prompt: String(
-          ((raw.extensions as Record<string, unknown>)?.depth_prompt as Record<string, unknown>)
-            ?.prompt ?? "",
+          ((raw.extensions as Record<string, unknown>)?.depth_prompt as Record<string, unknown>)?.prompt ?? "",
         ),
         depth: Number(
-          ((raw.extensions as Record<string, unknown>)?.depth_prompt as Record<string, unknown>)
-            ?.depth ?? 4,
+          ((raw.extensions as Record<string, unknown>)?.depth_prompt as Record<string, unknown>)?.depth ?? 4,
         ),
-        role: (((raw.extensions as Record<string, unknown>)?.depth_prompt as Record<string, unknown>)
-          ?.role as "system" | "user" | "assistant") ?? "system",
+        role:
+          (((raw.extensions as Record<string, unknown>)?.depth_prompt as Record<string, unknown>)?.role as
+            | "system"
+            | "user"
+            | "assistant") ?? "system",
       },
       backstory: String((raw.extensions as Record<string, unknown>)?.backstory ?? ""),
       appearance: String((raw.extensions as Record<string, unknown>)?.appearance ?? ""),
     },
-    character_book: raw.character_book as CharacterData["character_book"] ?? null,
+    character_book: (raw.character_book as CharacterData["character_book"]) ?? null,
   };
 }
 
@@ -176,9 +173,7 @@ function convertRisuToV2(raw: Record<string, unknown>): CharacterData {
     tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
     creator: String(raw.creator ?? ""),
     character_version: "",
-    alternate_greetings: Array.isArray(raw.alternateGreetings)
-      ? raw.alternateGreetings.map(String)
-      : [],
+    alternate_greetings: Array.isArray(raw.alternateGreetings) ? raw.alternateGreetings.map(String) : [],
     extensions: {},
     character_book: null,
   });

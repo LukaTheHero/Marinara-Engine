@@ -48,7 +48,10 @@ async function resolveConnection(
 
 /** Extract reliable JSON from an LLM response that may include markdown fences. */
 function parseJSON(raw: string): any {
-  let cleaned = raw.trim().replace(/```(?:json|markdown)?\s*/gi, "").replace(/`/g, "");
+  let cleaned = raw
+    .trim()
+    .replace(/```(?:json|markdown)?\s*/gi, "")
+    .replace(/`/g, "");
   const first = cleaned.indexOf("{");
   const last = cleaned.lastIndexOf("}");
   if (first === -1 || last === -1) throw new Error("No JSON object found in AI response");
@@ -57,10 +60,7 @@ function parseJSON(raw: string): any {
 }
 
 /** Build character context from the chat's character IDs. */
-async function buildCharacterContext(
-  chars: ReturnType<typeof createCharactersStorage>,
-  characterIds: string[],
-) {
+async function buildCharacterContext(chars: ReturnType<typeof createCharactersStorage>, characterIds: string[]) {
   let ctx = "";
   for (const cid of characterIds) {
     const row = await chars.getById(cid);
@@ -75,11 +75,9 @@ async function buildCharacterContext(
 }
 
 /** Build persona context. */
-async function buildPersonaContext(
-  chars: ReturnType<typeof createCharactersStorage>,
-) {
+async function buildPersonaContext(chars: ReturnType<typeof createCharactersStorage>) {
   const allPersonas = await chars.listPersonas();
-  const active = allPersonas.find((p: any) => (p.isActive === "true" || p.isActive === true));
+  const active = allPersonas.find((p: any) => p.isActive === "true" || p.isActive === true);
   if (!active) return { personaName: "User", personaCtx: "No persona information available." };
   let ctx = `Name: ${active.name}\n`;
   if (active.description) ctx += `${active.description}\n`;
@@ -104,7 +102,9 @@ async function buildGameStateContext(
   if (gs.date) ctx += `Date: ${gs.date}\n`;
 
   const playerStats = gs.playerStats
-    ? typeof gs.playerStats === "string" ? JSON.parse(gs.playerStats) : gs.playerStats
+    ? typeof gs.playerStats === "string"
+      ? JSON.parse(gs.playerStats)
+      : gs.playerStats
     : null;
   if (playerStats) {
     ctx += `\n${personaName}'s Stats:\n`;
@@ -124,7 +124,9 @@ async function buildGameStateContext(
   }
 
   const presentChars = gs.presentCharacters
-    ? typeof gs.presentCharacters === "string" ? JSON.parse(gs.presentCharacters) : gs.presentCharacters
+    ? typeof gs.presentCharacters === "string"
+      ? JSON.parse(gs.presentCharacters)
+      : gs.presentCharacters
     : [];
   if (presentChars.length) {
     ctx += `\nPresent Characters:\n`;
@@ -259,16 +261,20 @@ function buildActionPrompt(
     state += `- ${m.name}${m.isPlayer ? " (Player)" : ""}: ${m.hp}/${m.maxHp} HP\n`;
     const attacks = m.isPlayer && playerActions?.attacks ? playerActions.attacks : m.attacks;
     const items = m.isPlayer && playerActions?.items ? playerActions.items : m.items;
-    if (attacks?.length) state += `  Attacks: ${attacks.map((a: any) => typeof a === "string" ? a : a.name).join(", ")}\n`;
+    if (attacks?.length)
+      state += `  Attacks: ${attacks.map((a: any) => (typeof a === "string" ? a : a.name)).join(", ")}\n`;
     if (items?.length) state += `  Items: ${items.join(", ")}\n`;
-    if (m.statuses?.length) state += `  Status Effects: ${m.statuses.map((s: any) => `${s.emoji} ${s.name}`).join(", ")}\n`;
+    if (m.statuses?.length)
+      state += `  Status Effects: ${m.statuses.map((s: any) => `${s.emoji} ${s.name}`).join(", ")}\n`;
   }
   state += `\nEnemies:\n`;
   for (const e of combatStats.enemies) {
     state += `- ${e.name} (${e.sprite || ""}): ${e.hp}/${e.maxHp} HP\n`;
     if (e.description) state += `  ${e.description}\n`;
-    if (e.attacks?.length) state += `  Attacks: ${e.attacks.map((a: any) => typeof a === "string" ? a : a.name).join(", ")}\n`;
-    if (e.statuses?.length) state += `  Status Effects: ${e.statuses.map((s: any) => `${s.emoji} ${s.name}`).join(", ")}\n`;
+    if (e.attacks?.length)
+      state += `  Attacks: ${e.attacks.map((a: any) => (typeof a === "string" ? a : a.name)).join(", ")}\n`;
+    if (e.statuses?.length)
+      state += `  Status Effects: ${e.statuses.map((s: any) => `${s.emoji} ${s.name}`).join(", ")}\n`;
   }
 
   state += `\n${personaName}'s Action: ${action}\n\n`;
@@ -356,12 +362,10 @@ export async function encounterRoutes(app: FastifyInstance) {
     // Get recent chat messages for history
     const chatMessages = await chats.listMessages(chatId);
     const depth = settings.historyDepth || 8;
-    const recentMsgs: ChatMessage[] = chatMessages
-      .slice(-depth)
-      .map((m: any) => ({
-        role: (m.role === "narrator" ? "system" : m.role) as "user" | "assistant" | "system",
-        content: m.content as string,
-      }));
+    const recentMsgs: ChatMessage[] = chatMessages.slice(-depth).map((m: any) => ({
+      role: (m.role === "narrator" ? "system" : m.role) as "user" | "assistant" | "system",
+      content: m.content as string,
+    }));
 
     const prompt = buildInitPrompt(personaName, personaCtx, characterCtx, recentMsgs, gameStateCtx);
 
@@ -399,12 +403,10 @@ export async function encounterRoutes(app: FastifyInstance) {
 
     const chatMessages = await chats.listMessages(chatId);
     const depth = settings.historyDepth || 8;
-    const recentMsgs: ChatMessage[] = chatMessages
-      .slice(-depth)
-      .map((m: any) => ({
-        role: (m.role === "narrator" ? "system" : m.role) as "user" | "assistant" | "system",
-        content: m.content as string,
-      }));
+    const recentMsgs: ChatMessage[] = chatMessages.slice(-depth).map((m: any) => ({
+      role: (m.role === "narrator" ? "system" : m.role) as "user" | "assistant" | "system",
+      content: m.content as string,
+    }));
 
     const prompt = buildActionPrompt(
       personaName,

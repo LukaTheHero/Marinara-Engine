@@ -1,14 +1,14 @@
 // ──────────────────────────────────────────────
-// Routes: Chat Backgrounds (upload, list, delete, serve)
+// Routes: Chat Backgrounds (upload, list, delete, serve, tags, rename)
 // ──────────────────────────────────────────────
 import type { FastifyInstance } from "fastify";
-import { existsSync, mkdirSync, readdirSync, unlinkSync } from "fs";
-import { join, extname } from "path";
+import { existsSync, mkdirSync, readdirSync, unlinkSync, readFileSync, writeFileSync, renameSync } from "fs";
+import { join, extname, basename, parse as parsePath } from "path";
 import { pipeline } from "stream/promises";
 import { createWriteStream } from "fs";
-import { randomUUID } from "crypto";
 
 const BG_DIR = join(process.cwd(), "data", "backgrounds");
+const META_PATH = join(BG_DIR, "meta.json");
 
 // Ensure directory exists
 function ensureDir() {
@@ -17,12 +17,48 @@ function ensureDir() {
   }
 }
 
+interface BgMeta {
+  originalName?: string;
+  tags: string[];
+}
+type MetaMap = Record<string, BgMeta>;
+
+function readMeta(): MetaMap {
+  ensureDir();
+  if (!existsSync(META_PATH)) return {};
+  try {
+    return JSON.parse(readFileSync(META_PATH, "utf-8")) as MetaMap;
+  } catch {
+    return {};
+  }
+}
+
+function writeMeta(meta: MetaMap) {
+  ensureDir();
+  writeFileSync(META_PATH, JSON.stringify(meta, null, 2), "utf-8");
+}
+
 const ALLOWED_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
 
+/** Sanitise a filename: keep alphanumeric, spaces, hyphens, underscores, dots. */
+function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9 _.\-]/g, "").trim();
+}
+
+/** Given a desired filename, return a unique filename that doesn't collide with existing files. */
+function uniqueFilename(desired: string): string {
+  if (!existsSync(join(BG_DIR, desired))) return desired;
+  const { name, ext } = parsePath(desired);
+  let i = 2;
+  while (existsSync(join(BG_DIR, `${name}_${i}${ext}`))) i++;
+  return `${name}_${i}${ext}`;
+}
+
 export async function backgroundsRoutes(app: FastifyInstance) {
-  // List all backgrounds
+  // List all backgrounds (includes tags)
   app.get("/", async () => {
     ensureDir();
+    const meta = readMeta();
     const files = readdirSync(BG_DIR).filter((f) => {
       const ext = extname(f).toLowerCase();
       return ALLOWED_EXTS.has(ext);
@@ -30,10 +66,22 @@ export async function backgroundsRoutes(app: FastifyInstance) {
     return files.map((filename) => ({
       filename,
       url: `/api/backgrounds/file/${encodeURIComponent(filename)}`,
+      originalName: meta[filename]?.originalName ?? null,
+      tags: meta[filename]?.tags ?? [],
     }));
   });
 
-  // Upload a new background
+  // List all unique tags (for autocomplete)
+  app.get("/tags", async () => {
+    const meta = readMeta();
+    const tagSet = new Set<string>();
+    for (const entry of Object.values(meta)) {
+      for (const t of entry.tags) tagSet.add(t);
+    }
+    return [...tagSet].sort();
+  });
+
+  // Upload a new background (preserves original filename)
   app.post("/upload", async (req, reply) => {
     ensureDir();
     const data = await req.file();
@@ -46,15 +94,113 @@ export async function backgroundsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: `Unsupported file type: ${ext}` });
     }
 
-    const safeName = `${randomUUID()}${ext}`;
+    // Use the original filename (sanitised) instead of a UUID
+    const sanitized = sanitizeFilename(basename(data.filename));
+    const safeName = sanitized ? uniqueFilename(sanitized) : uniqueFilename(`background${ext}`);
     const filePath = join(BG_DIR, safeName);
 
     await pipeline(data.file, createWriteStream(filePath));
 
+    // Store metadata
+    const meta = readMeta();
+    meta[safeName] = { originalName: data.filename, tags: [] };
+    writeMeta(meta);
+
     return {
       success: true,
       filename: safeName,
-      url: `/api/backgrounds/file/${safeName}`,
+      originalName: data.filename,
+      url: `/api/backgrounds/file/${encodeURIComponent(safeName)}`,
+      tags: [],
+    };
+  });
+
+  // Set tags for a background
+  app.patch("/:filename/tags", async (req, reply) => {
+    const { filename } = req.params as { filename: string };
+    if (filename.includes("..") || filename.includes("/")) {
+      return reply.status(400).send({ error: "Invalid filename" });
+    }
+
+    const filePath = join(BG_DIR, filename);
+    if (!existsSync(filePath)) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    const body = req.body as { tags?: string[] };
+    if (!Array.isArray(body?.tags)) {
+      return reply.status(400).send({ error: "tags must be an array of strings" });
+    }
+
+    // Sanitise: lowercase, trim, unique, limit length
+    const tags = [
+      ...new Set(
+        body.tags
+          .map((t: unknown) =>
+            String(t)
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9 _-]/g, ""),
+          )
+          .filter((t) => t.length > 0 && t.length <= 40),
+      ),
+    ];
+
+    const meta = readMeta();
+    if (!meta[filename]) meta[filename] = { tags: [] };
+    meta[filename].tags = tags;
+    writeMeta(meta);
+
+    return { success: true, tags };
+  });
+
+  // Rename a background file
+  app.patch("/:filename/rename", async (req, reply) => {
+    const { filename } = req.params as { filename: string };
+    if (filename.includes("..") || filename.includes("/")) {
+      return reply.status(400).send({ error: "Invalid filename" });
+    }
+
+    const filePath = join(BG_DIR, filename);
+    if (!existsSync(filePath)) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    const body = req.body as { name?: string };
+    if (!body?.name || typeof body.name !== "string") {
+      return reply.status(400).send({ error: "name is required" });
+    }
+
+    // Keep the existing extension
+    const ext = extname(filename).toLowerCase();
+    const rawName = sanitizeFilename(body.name.replace(/\.[^.]+$/, "")); // strip any extension they included
+    if (!rawName) {
+      return reply.status(400).send({ error: "Name is empty after sanitisation" });
+    }
+
+    const desired = `${rawName}${ext}`;
+    if (desired === filename) {
+      return { success: true, filename, url: `/api/backgrounds/file/${encodeURIComponent(filename)}` };
+    }
+
+    const newFilename = uniqueFilename(desired);
+    const newPath = join(BG_DIR, newFilename);
+
+    renameSync(filePath, newPath);
+
+    // Move metadata entry
+    const meta = readMeta();
+    if (meta[filename]) {
+      meta[newFilename] = meta[filename];
+      delete meta[filename];
+    }
+    writeMeta(meta);
+
+    return {
+      success: true,
+      oldFilename: filename,
+      filename: newFilename,
+      url: `/api/backgrounds/file/${encodeURIComponent(newFilename)}`,
     };
   });
 
@@ -106,6 +252,12 @@ export async function backgroundsRoutes(app: FastifyInstance) {
     }
 
     unlinkSync(filePath);
+
+    // Remove from metadata
+    const meta = readMeta();
+    delete meta[filename];
+    writeMeta(meta);
+
     return { success: true };
   });
 }

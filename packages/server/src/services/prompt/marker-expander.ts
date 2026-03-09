@@ -3,10 +3,14 @@
 // sections into actual content at assembly time.
 // ──────────────────────────────────────────────
 import type { DB } from "../../db/connection.js";
-import type { MarkerConfig, ChatMLMessage, CharacterData, WrapFormat } from "@rpg-engine/shared";
+import type { MarkerConfig, ChatMLMessage, CharacterData, WrapFormat, RPGStatsConfig } from "@rpg-engine/shared";
 import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createAgentsStorage } from "../storage/agents.storage.js";
 import { processLorebooks } from "../lorebook/index.js";
 import { wrapContent } from "./format-engine.js";
+import { agentRuns } from "../../db/schema/index.js";
+import { gameStateSnapshots } from "../../db/schema/index.js";
+import { eq, and, desc } from "drizzle-orm";
 
 /** Context required for expanding markers. */
 export interface MarkerContext {
@@ -22,6 +26,7 @@ export interface MarkerContext {
     appearance?: string;
   };
   chatMessages: ChatMLMessage[];
+  chatSummary: string | null;
   wrapFormat: WrapFormat;
 }
 
@@ -36,10 +41,7 @@ export interface ExpandedMarker {
 /**
  * Expand a marker section into actual content based on its type and config.
  */
-export async function expandMarker(
-  config: MarkerConfig,
-  ctx: MarkerContext,
-): Promise<ExpandedMarker> {
+export async function expandMarker(config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
   switch (config.type) {
     case "character":
       return expandCharacter(config, ctx);
@@ -51,8 +53,12 @@ export async function expandMarker(
       return expandLorebook(config, ctx);
     case "chat_history":
       return expandChatHistory(config, ctx);
+    case "chat_summary":
+      return expandChatSummary(ctx);
     case "dialogue_examples":
       return expandDialogueExamples(config, ctx);
+    case "agent_data":
+      return expandAgentData(config, ctx);
     default:
       return { content: "" };
   }
@@ -60,10 +66,7 @@ export async function expandMarker(
 
 // ── Character ──────────────────────────────────
 
-async function expandCharacter(
-  config: MarkerConfig,
-  ctx: MarkerContext,
-): Promise<ExpandedMarker> {
+async function expandCharacter(config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
   const charStorage = createCharactersStorage(ctx.db);
   const parts: string[] = [];
 
@@ -72,29 +75,29 @@ async function expandCharacter(
     if (!row) continue;
     const data = JSON.parse(row.data) as CharacterData;
 
-    const fields = config.characterFields ?? [
-      "name",
-      "description",
-      "personality",
-      "scenario",
-    ];
+    const fields = config.characterFields ?? ["description", "personality", "scenario"];
 
     const charParts: string[] = [];
     for (const field of fields) {
+      if (field === "name") continue; // Name is used as the parent tag, not a child field
       const value = getCharacterField(data, field);
       if (value) {
-        charParts.push(wrapContent(value, field, ctx.wrapFormat));
+        charParts.push(wrapContent(value, field, ctx.wrapFormat, 2));
       }
     }
 
-    if (ctx.characterIds.length > 1) {
-      // Multi-character: wrap each character's info
-      const charBlock = charParts.filter(Boolean).join("\n");
-      if (charBlock) {
-        parts.push(wrapContent(charBlock, data.name, ctx.wrapFormat));
+    // Auto-include stats if rpgStats is enabled and not already in fields
+    if (!fields.includes("stats")) {
+      const statsText = formatRPGStats(data.extensions?.rpgStats as RPGStatsConfig | undefined);
+      if (statsText) {
+        charParts.push(wrapContent(statsText, "stats", ctx.wrapFormat, 2));
       }
-    } else {
-      parts.push(...charParts.filter(Boolean));
+    }
+
+    // Always wrap in a character-name parent tag
+    const charBlock = charParts.filter(Boolean).join("\n");
+    if (charBlock) {
+      parts.push(wrapContent(charBlock, data.name, ctx.wrapFormat, 1));
     }
   }
 
@@ -123,49 +126,57 @@ function getCharacterField(data: CharacterData, field: string): string {
       return data.extensions?.backstory ?? "";
     case "appearance":
       return data.extensions?.appearance ?? "";
+    case "stats":
+      return formatRPGStats(data.extensions?.rpgStats as RPGStatsConfig | undefined);
     default:
       return "";
   }
 }
 
+/** Format RPG stats into a readable block. */
+function formatRPGStats(rpgStats: RPGStatsConfig | undefined): string {
+  if (!rpgStats?.enabled) return "";
+  const lines: string[] = [];
+  lines.push(`HP: ${rpgStats.hp.value}/${rpgStats.hp.max}`);
+  lines.push(`MP: ${rpgStats.mp.value}/${rpgStats.mp.max}`);
+  if (rpgStats.attributes.length > 0) {
+    lines.push(rpgStats.attributes.map((a) => `${a.name}: ${a.value}/${a.max}`).join(", "));
+  }
+  return lines.join("\n");
+}
+
 // ── Persona ────────────────────────────────────
 
-async function expandPersona(
-  _config: MarkerConfig,
-  ctx: MarkerContext,
-): Promise<ExpandedMarker> {
+async function expandPersona(_config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
   const parts: string[] = [];
   const pName = ctx.personaName || "User";
 
   if (ctx.personaDescription) {
-    parts.push(wrapContent(ctx.personaDescription, "description", ctx.wrapFormat));
+    parts.push(wrapContent(ctx.personaDescription, "description", ctx.wrapFormat, 2));
   }
   if (ctx.personaFields?.personality) {
-    parts.push(wrapContent(ctx.personaFields.personality, "personality", ctx.wrapFormat));
+    parts.push(wrapContent(ctx.personaFields.personality, "personality", ctx.wrapFormat, 2));
   }
   if (ctx.personaFields?.backstory) {
-    parts.push(wrapContent(ctx.personaFields.backstory, "backstory", ctx.wrapFormat));
+    parts.push(wrapContent(ctx.personaFields.backstory, "backstory", ctx.wrapFormat, 2));
   }
   if (ctx.personaFields?.appearance) {
-    parts.push(wrapContent(ctx.personaFields.appearance, "appearance", ctx.wrapFormat));
+    parts.push(wrapContent(ctx.personaFields.appearance, "appearance", ctx.wrapFormat, 2));
   }
   if (ctx.personaFields?.scenario) {
-    parts.push(wrapContent(ctx.personaFields.scenario, "scenario", ctx.wrapFormat));
+    parts.push(wrapContent(ctx.personaFields.scenario, "scenario", ctx.wrapFormat, 2));
   }
 
   if (parts.length === 0) return { content: "" };
 
   return {
-    content: wrapContent(parts.join("\n"), pName, ctx.wrapFormat),
+    content: wrapContent(parts.join("\n"), pName, ctx.wrapFormat, 1),
   };
 }
 
 // ── Lorebook / World Info ──────────────────────
 
-async function expandLorebook(
-  config: MarkerConfig,
-  ctx: MarkerContext,
-): Promise<ExpandedMarker> {
+async function expandLorebook(config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
   const result = await processLorebooks(ctx.db, ctx.chatMessages, null, {
     chatId: ctx.chatId,
     characterIds: ctx.characterIds,
@@ -179,9 +190,7 @@ async function expandLorebook(
     case "lorebook":
     default: {
       // Combined lorebook — all world info
-      const combined = [result.worldInfoBefore, result.worldInfoAfter]
-        .filter(Boolean)
-        .join("\n\n");
+      const combined = [result.worldInfoBefore, result.worldInfoAfter].filter(Boolean).join("\n\n");
       return { content: combined };
     }
   }
@@ -189,10 +198,7 @@ async function expandLorebook(
 
 // ── Chat History ───────────────────────────────
 
-async function expandChatHistory(
-  config: MarkerConfig,
-  ctx: MarkerContext,
-): Promise<ExpandedMarker> {
+async function expandChatHistory(config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
   const opts = config.chatHistoryOptions ?? {};
   let messages = [...ctx.chatMessages];
 
@@ -206,6 +212,48 @@ async function expandChatHistory(
     messages = messages.slice(-opts.maxMessages);
   }
 
+  // Add chat_history / last_message wrapping based on format
+  if (messages.length > 0 && ctx.wrapFormat !== "none") {
+    // Find the last user message index — this becomes <last_message>
+    let lastUserIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]!.role === "user") {
+        lastUserIdx = i;
+        break;
+      }
+    }
+
+    // Everything before the last user message is "chat history",
+    // the last user message gets "last_message" wrapping
+    const historyEnd = lastUserIdx >= 0 ? lastUserIdx : messages.length;
+
+    if (ctx.wrapFormat === "xml") {
+      if (historyEnd > 0) {
+        messages[0] = { ...messages[0]!, content: `<chat_history>\n${messages[0]!.content}` };
+        messages[historyEnd - 1] = {
+          ...messages[historyEnd - 1]!,
+          content: `${messages[historyEnd - 1]!.content}\n</chat_history>`,
+        };
+      }
+      if (lastUserIdx >= 0) {
+        messages[lastUserIdx] = {
+          ...messages[lastUserIdx]!,
+          content: `<last_message>\n${messages[lastUserIdx]!.content}\n</last_message>`,
+        };
+      }
+    } else if (ctx.wrapFormat === "markdown") {
+      if (historyEnd > 0) {
+        messages[0] = { ...messages[0]!, content: `## Chat History\n${messages[0]!.content}` };
+      }
+      if (lastUserIdx >= 0) {
+        messages[lastUserIdx] = {
+          ...messages[lastUserIdx]!,
+          content: `## Last Message\n${messages[lastUserIdx]!.content}`,
+        };
+      }
+    }
+  }
+
   // Chat history is special — it returns multiple messages to be inserted directly,
   // not a single content block. The assembler handles this.
   return { content: "", messages };
@@ -213,10 +261,7 @@ async function expandChatHistory(
 
 // ── Dialogue Examples ──────────────────────────
 
-async function expandDialogueExamples(
-  _config: MarkerConfig,
-  ctx: MarkerContext,
-): Promise<ExpandedMarker> {
+async function expandDialogueExamples(_config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
   const charStorage = createCharactersStorage(ctx.db);
   const parts: string[] = [];
 
@@ -231,4 +276,146 @@ async function expandDialogueExamples(
   }
 
   return { content: parts.join("\n\n") };
+}
+
+// ── Chat Summary ───────────────────────────────
+
+function expandChatSummary(ctx: MarkerContext): ExpandedMarker {
+  return { content: ctx.chatSummary ?? "" };
+}
+
+// ── Agent Data ─────────────────────────────────
+
+async function expandAgentData(config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
+  const agentType = config.agentType;
+  if (!agentType) return { content: "" };
+
+  // Special case: world-state uses game_state_snapshots for richer structured data
+  if (agentType === "world-state") {
+    return expandWorldStateAgent(ctx);
+  }
+
+  // Generic: find latest successful agent run for this chat
+  const agentsStorage = createAgentsStorage(ctx.db);
+  const agentConfig = await agentsStorage.getByType(agentType);
+  if (!agentConfig) return { content: "" };
+
+  const latestRuns = await ctx.db
+    .select()
+    .from(agentRuns)
+    .where(
+      and(eq(agentRuns.agentConfigId, agentConfig.id), eq(agentRuns.chatId, ctx.chatId), eq(agentRuns.success, "true")),
+    )
+    .orderBy(desc(agentRuns.createdAt))
+    .limit(1);
+
+  const run = latestRuns[0];
+  if (!run) return { content: "" };
+
+  const resultData = JSON.parse(run.resultData);
+  // Format result data as readable text
+  return { content: formatAgentResult(resultData) };
+}
+
+async function expandWorldStateAgent(ctx: MarkerContext): Promise<ExpandedMarker> {
+  // Only use committed game state — uncommitted snapshots from swipes/regens
+  // are never shown so the prompt stays clean between swipes.
+  const committedRows = await ctx.db
+    .select()
+    .from(gameStateSnapshots)
+    .where(and(eq(gameStateSnapshots.chatId, ctx.chatId), eq(gameStateSnapshots.committed, 1)))
+    .orderBy(desc(gameStateSnapshots.createdAt))
+    .limit(1);
+
+  const snap = committedRows[0];
+  if (!snap) return { content: "" };
+
+  const parts: string[] = [];
+  if (snap.date) parts.push(`Date: ${snap.date}`);
+  if (snap.time) parts.push(`Time: ${snap.time}`);
+  if (snap.location) parts.push(`Location: ${snap.location}`);
+  if (snap.weather) parts.push(`Weather: ${snap.weather}`);
+  if (snap.temperature) parts.push(`Temperature: ${snap.temperature}`);
+
+  const presentChars = JSON.parse(snap.presentCharacters);
+  if (Array.isArray(presentChars) && presentChars.length > 0) {
+    const charLines = presentChars.map((c: any) => {
+      if (typeof c === "string") return `- ${c}`;
+      const details: string[] = [];
+      if (c.mood) details.push(`mood: ${c.mood}`);
+      if (c.appearance) details.push(`appearance: ${c.appearance}`);
+      if (c.outfit) details.push(`outfit: ${c.outfit}`);
+      if (c.thoughts) details.push(`thoughts: ${c.thoughts}`);
+      if (Array.isArray(c.stats) && c.stats.length > 0) {
+        const statStr = c.stats.map((s: any) => `${s.name}: ${s.value}${s.max ? `/${s.max}` : ""}`).join(", ");
+        details.push(`stats: ${statStr}`);
+      }
+      const detailStr = details.length > 0 ? ` (${details.join("; ")})` : "";
+      return `- ${c.emoji ?? ""} ${c.name ?? c}${detailStr}`;
+    });
+    parts.push(`Present Characters:\n${charLines.join("\n")}`);
+  }
+
+  // Persona stats (needs/condition bars)
+  if (snap.personaStats) {
+    const psBars = typeof snap.personaStats === "string" ? JSON.parse(snap.personaStats) : snap.personaStats;
+    if (Array.isArray(psBars) && psBars.length > 0) {
+      const barLines = psBars.map((b: any) => `- ${b.name}: ${b.value}/${b.max}`);
+      parts.push(`Persona Stats:\n${barLines.join("\n")}`);
+    }
+  }
+
+  if (snap.playerStats) {
+    const stats = typeof snap.playerStats === "string" ? JSON.parse(snap.playerStats) : snap.playerStats;
+    const statParts: string[] = [];
+    if (stats.status) statParts.push(`Status: ${stats.status}`);
+    if (Array.isArray(stats.activeQuests) && stats.activeQuests.length > 0) {
+      const questLines = stats.activeQuests.map((q: any) => {
+        const objectives = Array.isArray(q.objectives)
+          ? q.objectives.map((o: any) => `  ${o.completed ? "[x]" : "[ ]"} ${o.text}`).join("\n")
+          : "";
+        return `- ${q.name}${q.completed ? " (completed)" : ""}${objectives ? "\n" + objectives : ""}`;
+      });
+      statParts.push(`Active Quests:\n${questLines.join("\n")}`);
+    }
+    if (Array.isArray(stats.inventory) && stats.inventory.length > 0) {
+      const invLines = stats.inventory.map(
+        (item: any) =>
+          `- ${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}${item.description ? ` — ${item.description}` : ""}`,
+      );
+      statParts.push(`Inventory:\n${invLines.join("\n")}`);
+    }
+    if (Array.isArray(stats.stats) && stats.stats.length > 0) {
+      const statLines = stats.stats.map((s: any) => `- ${s.name}: ${s.value}${s.max ? `/${s.max}` : ""}`);
+      statParts.push(`Stats:\n${statLines.join("\n")}`);
+    }
+    if (statParts.length > 0) parts.push(statParts.join("\n"));
+  }
+
+  return { content: parts.join("\n") };
+}
+
+function formatAgentResult(data: unknown): string {
+  if (typeof data === "string") return data;
+  if (data == null) return "";
+  if (typeof data === "object") {
+    // For objects, produce a readable key-value format
+    const entries = Object.entries(data as Record<string, unknown>);
+    return entries
+      .filter(([, v]) => v != null && v !== "")
+      .map(([k, v]) => {
+        const label = k
+          .replace(/([A-Z])/g, " $1")
+          .replace(/[_-]/g, " ")
+          .trim();
+        const capitalLabel = label.charAt(0).toUpperCase() + label.slice(1);
+        if (Array.isArray(v)) {
+          return `${capitalLabel}:\n${v.map((item) => `- ${typeof item === "string" ? item : JSON.stringify(item)}`).join("\n")}`;
+        }
+        if (typeof v === "object") return `${capitalLabel}: ${JSON.stringify(v)}`;
+        return `${capitalLabel}: ${v}`;
+      })
+      .join("\n");
+  }
+  return String(data);
 }

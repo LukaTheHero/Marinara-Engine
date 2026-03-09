@@ -68,7 +68,12 @@ export async function connectionsRoutes(app: FastifyInstance) {
         return { success: true, message: "Connection successful", latencyMs, modelName: conn.model };
       } else {
         const body = await res.text();
-        return { success: false, message: `API returned ${res.status}: ${body.slice(0, 200)}`, latencyMs, modelName: null };
+        return {
+          success: false,
+          message: `API returned ${res.status}: ${body.slice(0, 200)}`,
+          latencyMs,
+          modelName: null,
+        };
       }
     } catch (err) {
       return {
@@ -77,6 +82,58 @@ export async function connectionsRoutes(app: FastifyInstance) {
         latencyMs: Date.now() - start,
         modelName: null,
       };
+    }
+  });
+
+  // ── Fetch available models from the provider API ──
+  app.get<{ Params: { id: string } }>("/:id/models", async (req, reply) => {
+    const conn = await storage.getWithKey(req.params.id);
+    if (!conn) return reply.status(404).send({ error: "Connection not found" });
+
+    try {
+      const { PROVIDERS } = await import("@rpg-engine/shared");
+      const provider = PROVIDERS[conn.provider as keyof typeof PROVIDERS];
+      const baseUrl = conn.baseUrl || provider?.defaultBaseUrl || "";
+
+      if (!baseUrl) {
+        return reply.status(400).send({ error: "No base URL configured" });
+      }
+
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (provider?.usesAuthHeader) {
+        headers["Authorization"] = `Bearer ${conn.apiKey}`;
+      }
+      if (provider?.apiKeyHeader) {
+        headers[provider.apiKeyHeader] = conn.apiKey;
+      }
+
+      // Anthropic requires version header for models endpoint
+      if (conn.provider === "anthropic") {
+        headers["anthropic-version"] = "2023-06-01";
+      }
+
+      let modelsUrl = `${baseUrl}${provider?.modelsEndpoint ?? "/models"}`;
+      if (conn.provider === "google") {
+        modelsUrl += `?key=${conn.apiKey}`;
+      }
+
+      const res = await fetch(modelsUrl, { headers });
+      if (!res.ok) {
+        const body = await res.text();
+        return reply.status(502).send({
+          error: `Provider returned ${res.status}: ${body.slice(0, 300)}`,
+        });
+      }
+
+      const json = (await res.json()) as Record<string, unknown>;
+
+      // Normalize across providers
+      const models = normalizeModelsResponse(conn.provider, json);
+      return { models };
+    } catch (err) {
+      return reply.status(502).send({
+        error: `Failed to fetch models: ${err instanceof Error ? err.message : "Unknown error"}`,
+      });
     }
   });
 
@@ -102,15 +159,12 @@ export async function connectionsRoutes(app: FastifyInstance) {
       const provider = createLLMProvider(conn.provider, baseUrl, conn.apiKey);
 
       let fullResponse = "";
-      for await (const chunk of provider.chat(
-        [{ role: "user", content: "hi" }],
-        {
-          model: conn.model,
-          temperature: 0.7,
-          maxTokens: 200,
-          stream: false,
-        },
-      )) {
+      for await (const chunk of provider.chat([{ role: "user", content: "hi" }], {
+        model: conn.model,
+        temperature: 0.7,
+        maxTokens: 200,
+        stream: false,
+      })) {
         fullResponse += chunk;
       }
 
@@ -131,4 +185,78 @@ export async function connectionsRoutes(app: FastifyInstance) {
       };
     }
   });
+}
+
+// ──────────────────────────────────────────────
+// Normalize models response from different providers
+// ──────────────────────────────────────────────
+interface RemoteModel {
+  id: string;
+  name: string;
+}
+
+function normalizeModelsResponse(provider: string, json: Record<string, unknown>): RemoteModel[] {
+  switch (provider) {
+    case "google": {
+      // Google returns { models: [{ name: "models/gemini-...", displayName: "..." }] }
+      const models = (json.models ?? []) as Array<{
+        name?: string;
+        displayName?: string;
+        supportedGenerationMethods?: string[];
+      }>;
+      return models
+        .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+        .map((m) => ({
+          id: (m.name ?? "").replace(/^models\//, ""),
+          name: m.displayName ?? (m.name ?? "").replace(/^models\//, ""),
+        }))
+        .filter((m) => m.id);
+    }
+
+    case "anthropic": {
+      // Anthropic returns { data: [{ id: "claude-...", display_name: "..." }] }
+      const data = (json.data ?? []) as Array<{
+        id?: string;
+        display_name?: string;
+        type?: string;
+      }>;
+      return data
+        .filter((m) => m.type === "model" || m.id)
+        .map((m) => ({
+          id: m.id ?? "",
+          name: m.display_name ?? m.id ?? "",
+        }))
+        .filter((m) => m.id);
+    }
+
+    case "cohere": {
+      // Cohere returns { models: [{ name: "command-r-plus", ... }] }
+      const models = (json.models ?? []) as Array<{
+        name?: string;
+        endpoints?: string[];
+      }>;
+      return models
+        .filter((m) => m.endpoints?.includes("chat"))
+        .map((m) => ({
+          id: m.name ?? "",
+          name: m.name ?? "",
+        }))
+        .filter((m) => m.id);
+    }
+
+    default: {
+      // OpenAI-compatible: { data: [{ id: "gpt-4o", ... }] }
+      // This covers openai, mistral, openrouter, custom
+      const data = (json.data ?? []) as Array<{
+        id?: string;
+        name?: string;
+      }>;
+      return data
+        .map((m) => ({
+          id: m.id ?? "",
+          name: m.name ?? m.id ?? "",
+        }))
+        .filter((m) => m.id);
+    }
+  }
 }

@@ -51,10 +51,7 @@ export function createCharactersStorage(db: DB) {
     },
 
     async updateAvatar(id: string, avatarPath: string) {
-      await db
-        .update(characters)
-        .set({ avatarPath, updatedAt: now() })
-        .where(eq(characters.id, id));
+      await db.update(characters).set({ avatarPath, updatedAt: now() }).where(eq(characters.id, id));
       return this.getById(id);
     },
 
@@ -73,7 +70,21 @@ export function createCharactersStorage(db: DB) {
       return rows[0] ?? null;
     },
 
-    async createPersona(name: string, description: string, avatarPath?: string, extra?: { personality?: string; scenario?: string; backstory?: string; appearance?: string; nameColor?: string; dialogueColor?: string; boxColor?: string }) {
+    async createPersona(
+      name: string,
+      description: string,
+      avatarPath?: string,
+      extra?: {
+        personality?: string;
+        scenario?: string;
+        backstory?: string;
+        appearance?: string;
+        nameColor?: string;
+        dialogueColor?: string;
+        boxColor?: string;
+        personaStats?: string;
+      },
+    ) {
       const id = newId();
       const timestamp = now();
       await db.insert(personas).values({
@@ -89,6 +100,7 @@ export function createCharactersStorage(db: DB) {
         nameColor: extra?.nameColor ?? "",
         dialogueColor: extra?.dialogueColor ?? "",
         boxColor: extra?.boxColor ?? "",
+        personaStats: extra?.personaStats ?? "",
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -106,7 +118,22 @@ export function createCharactersStorage(db: DB) {
       await db.delete(personas).where(eq(personas.id, id));
     },
 
-    async updatePersona(id: string, updates: { name?: string; description?: string; personality?: string; scenario?: string; backstory?: string; appearance?: string; avatarPath?: string; nameColor?: string; dialogueColor?: string; boxColor?: string }) {
+    async updatePersona(
+      id: string,
+      updates: {
+        name?: string;
+        description?: string;
+        personality?: string;
+        scenario?: string;
+        backstory?: string;
+        appearance?: string;
+        avatarPath?: string;
+        nameColor?: string;
+        dialogueColor?: string;
+        boxColor?: string;
+        personaStats?: string;
+      },
+    ) {
       const sets: Record<string, unknown> = { updatedAt: now() };
       if (updates.name !== undefined) sets.name = updates.name;
       if (updates.description !== undefined) sets.description = updates.description;
@@ -118,6 +145,7 @@ export function createCharactersStorage(db: DB) {
       if (updates.nameColor !== undefined) sets.nameColor = updates.nameColor;
       if (updates.dialogueColor !== undefined) sets.dialogueColor = updates.dialogueColor;
       if (updates.boxColor !== undefined) sets.boxColor = updates.boxColor;
+      if (updates.personaStats !== undefined) sets.personaStats = updates.personaStats;
       await db.update(personas).set(sets).where(eq(personas.id, id));
       return this.getPersona(id);
     },
@@ -147,7 +175,10 @@ export function createCharactersStorage(db: DB) {
       return this.getGroupById(id);
     },
 
-    async updateGroup(id: string, updates: { name?: string; description?: string; characterIds?: string[]; avatarPath?: string }) {
+    async updateGroup(
+      id: string,
+      updates: { name?: string; description?: string; characterIds?: string[]; avatarPath?: string },
+    ) {
       const existing = await this.getGroupById(id);
       if (!existing) return null;
       await db

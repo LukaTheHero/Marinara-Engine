@@ -83,8 +83,7 @@ export async function lorebookMakerRoutes(app: FastifyInstance) {
       const provider = createLLMProvider(conn.provider, baseUrl, conn.apiKey);
       let fullResponse = "";
 
-      const userPrompt =
-        `Generate ${input.entryCount} lorebook entries based on: ${input.prompt}`;
+      const userPrompt = `Generate ${input.entryCount} lorebook entries based on: ${input.prompt}`;
 
       for await (const chunk of provider.chat(
         [

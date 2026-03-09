@@ -1,13 +1,39 @@
 // ──────────────────────────────────────────────
 // Panel: Settings (polished)
 // ──────────────────────────────────────────────
-import { useUIStore, type CustomTheme, type InstalledExtension, type VisualTheme } from "../../stores/ui.store";
+import {
+  useUIStore,
+  type CustomTheme,
+  type InstalledExtension,
+  type VisualTheme,
+  type HudPosition,
+} from "../../stores/ui.store";
 import { cn } from "../../lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
 import { useRef, useState } from "react";
-import { Upload, X, Image, Trash2, Check, Loader2, Palette, Puzzle, CloudRain, FileCode2, Power, PowerOff, Paintbrush, AlertTriangle } from "lucide-react";
+import {
+  Upload,
+  X,
+  Image,
+  Trash2,
+  Check,
+  Loader2,
+  Palette,
+  Puzzle,
+  CloudRain,
+  FileCode2,
+  Power,
+  LayoutDashboard,
+  PowerOff,
+  Paintbrush,
+  AlertTriangle,
+  Tag,
+  Pencil,
+} from "lucide-react";
 import { useClearAllData } from "../../hooks/use-chats";
+import { useChatStore } from "../../stores/chat.store";
+import { chatKeys } from "../../hooks/use-chats";
 import { HelpTooltip } from "../ui/HelpTooltip";
 
 const TABS = [
@@ -59,36 +85,68 @@ export function SettingsPanel() {
 }
 
 function GeneralSettings() {
-  const defaultUserName = useUIStore((s) => s.defaultUserName);
-  const setDefaultUserName = useUIStore((s) => s.setDefaultUserName);
-  const defaultChatMode = useUIStore((s) => s.defaultChatMode);
-  const setDefaultChatMode = useUIStore((s) => s.setDefaultChatMode);
+  const enableStreaming = useUIStore((s) => s.enableStreaming);
+  const setEnableStreaming = useUIStore((s) => s.setEnableStreaming);
+  const streamingFps = useUIStore((s) => s.streamingFps);
+  const setStreamingFps = useUIStore((s) => s.setStreamingFps);
+  const enterToSend = useUIStore((s) => s.enterToSend);
+  const setEnterToSend = useUIStore((s) => s.setEnterToSend);
+  const confirmBeforeDelete = useUIStore((s) => s.confirmBeforeDelete);
+  const setConfirmBeforeDelete = useUIStore((s) => s.setConfirmBeforeDelete);
+  const messagesPerPage = useUIStore((s) => s.messagesPerPage);
+  const setMessagesPerPage = useUIStore((s) => s.setMessagesPerPage);
 
   return (
     <div className="flex flex-col gap-3 animate-fade-in-up">
-      <div className="text-xs text-[var(--muted-foreground)]">
-        General application settings.
-      </div>
+      <div className="text-xs text-[var(--muted-foreground)]">General application settings.</div>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium inline-flex items-center gap-1">Default User Name <HelpTooltip text="The name displayed for your messages in chat. Characters will use this name when referring to you." /></span>
-        <input
-          value={defaultUserName}
-          onChange={(e) => setDefaultUserName(e.target.value)}
-          className="rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
-        />
+      <ToggleSetting
+        label="Enable streaming responses"
+        checked={enableStreaming}
+        onChange={setEnableStreaming}
+        help="When on, AI responses appear word-by-word as they're generated. When off, the full response appears at once after completion."
+      />
+
+      {/* Streaming FPS */}
+      <label className="flex items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50">
+        <span className="text-xs">Streaming smoothness</span>
+        <select
+          value={String(streamingFps)}
+          onChange={(e) => setStreamingFps(Number(e.target.value) as 30 | 60)}
+          className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs"
+        >
+          <option value="30">30 FPS</option>
+          <option value="60">60 FPS</option>
+        </select>
+        <HelpTooltip text="How often the streaming text updates on screen. 60 FPS is smoother but uses slightly more CPU. 30 FPS is lighter on older hardware." />
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium inline-flex items-center gap-1">Default Chat Mode <HelpTooltip text="Conversation mode is casual back-and-forth. Roleplay mode enables narrative features like character personas, world state tracking, and weather effects." /></span>
-        <select
-          value={defaultChatMode}
-          onChange={(e) => setDefaultChatMode(e.target.value as "conversation" | "roleplay")}
-          className="rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
-        >
-          <option value="conversation">Conversation</option>
-          <option value="roleplay">Roleplay</option>
-        </select>
+      <ToggleSetting
+        label="Send message on Enter"
+        checked={enterToSend}
+        onChange={setEnterToSend}
+        help="When on, pressing Enter sends your message. When off, Enter creates a new line and you must click the send button."
+      />
+
+      <ToggleSetting
+        label="Confirm before deleting"
+        checked={confirmBeforeDelete}
+        onChange={setConfirmBeforeDelete}
+        help="Shows a confirmation dialog before permanently deleting chats, characters, or other items. Recommended to keep on."
+      />
+
+      {/* Messages per page */}
+      <label className="flex items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50">
+        <span className="text-xs">Messages per page</span>
+        <input
+          type="number"
+          min={0}
+          max={500}
+          value={messagesPerPage}
+          onChange={(e) => setMessagesPerPage(Math.max(0, Math.min(500, parseInt(e.target.value, 10) || 0)))}
+          className="w-16 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs"
+        />
+        <HelpTooltip text="How many messages to load at a time. Click 'Load More' in the chat to see older messages. Set to 0 to load all messages at once." />
       </label>
     </div>
   );
@@ -103,8 +161,12 @@ function AppearanceSettings() {
   const setChatBackground = useUIStore((s) => s.setChatBackground);
   const fontSize = useUIStore((s) => s.fontSize);
   const setFontSize = useUIStore((s) => s.setFontSize);
+  const chatFontSize = useUIStore((s) => s.chatFontSize);
+  const setChatFontSize = useUIStore((s) => s.setChatFontSize);
   const weatherEffects = useUIStore((s) => s.weatherEffects);
   const setWeatherEffects = useUIStore((s) => s.setWeatherEffects);
+  const hudPosition = useUIStore((s) => s.hudPosition);
+  const setHudPosition = useUIStore((s) => s.setHudPosition);
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in-up">
@@ -116,10 +178,20 @@ function AppearanceSettings() {
           <HelpTooltip text="Choose how the entire app looks. 'Marinara' uses a retro Y2K aesthetic with glow effects. 'SillyTavern' uses a clean, minimal look inspired by the original SillyTavern." />
         </div>
         <div className="grid grid-cols-2 gap-2">
-          {([
-            { id: "default" as VisualTheme, label: "Default (Marinara)", desc: "Y2K / retro aesthetic with glow effects" },
-            { id: "sillytavern" as VisualTheme, label: "SillyTavern", desc: "Classic SillyTavern look — clean & minimal" },
-          ] as const).map((opt) => (
+          {(
+            [
+              {
+                id: "default" as VisualTheme,
+                label: "Default (Marinara)",
+                desc: "Y2K / retro aesthetic with glow effects",
+              },
+              {
+                id: "sillytavern" as VisualTheme,
+                label: "SillyTavern",
+                desc: "Classic SillyTavern look — clean & minimal",
+              },
+            ] as const
+          ).map((opt) => (
             <button
               key={opt.id}
               onClick={() => setVisualTheme(opt.id)}
@@ -138,7 +210,10 @@ function AppearanceSettings() {
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium inline-flex items-center gap-1">Color Scheme <HelpTooltip text="Switch between dark and light mode. Dark mode is easier on the eyes in low-light environments." /></span>
+        <span className="text-xs font-medium inline-flex items-center gap-1">
+          Color Scheme{" "}
+          <HelpTooltip text="Switch between dark and light mode. Dark mode is easier on the eyes in low-light environments." />
+        </span>
         <select
           value={theme}
           onChange={(e) => setTheme(e.target.value as "dark" | "light")}
@@ -150,7 +225,10 @@ function AppearanceSettings() {
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium inline-flex items-center gap-1">Display Size <HelpTooltip text="Adjusts the base font size across the whole app. Larger sizes improve readability. Default is 14px." /></span>
+        <span className="text-xs font-medium inline-flex items-center gap-1">
+          Display Size{" "}
+          <HelpTooltip text="Adjusts the base font size across the whole app. Larger sizes improve readability. Default is 14px." />
+        </span>
         <select
           value={String(fontSize)}
           onChange={(e) => setFontSize(Number(e.target.value) as 12 | 14 | 16 | 17)}
@@ -161,6 +239,25 @@ function AppearanceSettings() {
           <option value="16">Large</option>
           <option value="17">Extra Large</option>
         </select>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium inline-flex items-center gap-1">
+          Chat Font Size{" "}
+          <HelpTooltip text="Adjusts the font size of chat messages. Drag the slider to find your preferred reading size. Default is 16px." />
+        </span>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={12}
+            max={24}
+            step={1}
+            value={chatFontSize}
+            onChange={(e) => setChatFontSize(Number(e.target.value))}
+            className="flex-1 accent-[var(--primary)]"
+          />
+          <span className="text-xs tabular-nums text-[var(--muted-foreground)] w-8 text-right">{chatFontSize}px</span>
+        </div>
       </label>
 
       {/* ── Effects ── */}
@@ -176,14 +273,44 @@ function AppearanceSettings() {
           onChange={setWeatherEffects}
         />
         <p className="text-[10px] text-[var(--muted-foreground)] pl-6">
-          Shows animated weather particles in roleplay mode based on in-story weather and time of day.
+          Shows animated weather particles based on in-story weather and time of day. Requires the{" "}
+          <span className="font-medium">World State</span> agent to be enabled so weather data is extracted from the
+          narrative.
         </p>
+      </div>
+
+      {/* ── Widget Position ── */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-1.5">
+          <LayoutDashboard size={12} className="text-[var(--muted-foreground)]" />
+          <span className="text-xs font-medium">Widget Position</span>
+          <HelpTooltip text="Choose where the roleplay HUD widgets (stats, inventory, characters, etc.) are displayed on screen. 'Top' shows them in a horizontal bar above the chat. 'Left' or 'Right' stacks them vertically along the edge." />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {(["top", "left", "right"] as HudPosition[]).map((pos) => (
+            <button
+              key={pos}
+              onClick={() => setHudPosition(pos)}
+              className={cn(
+                "rounded-lg border px-3 py-2 text-xs font-medium capitalize transition-all",
+                hudPosition === pos
+                  ? "border-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]"
+                  : "border-[var(--border)] hover:border-[var(--primary)]/40",
+              )}
+            >
+              {pos}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Chat Background Picker ── */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium inline-flex items-center gap-1">Chat Background <HelpTooltip text="Upload a custom image to use as the background of the chat area. Supports JPG, PNG, and WebP. Remove to use the default background." /></span>
+          <span className="text-xs font-medium inline-flex items-center gap-1">
+            Chat Background{" "}
+            <HelpTooltip text="Upload a custom image to use as the background of the chat area. Supports JPG, PNG, and WebP. Remove to use the default background." />
+          </span>
           {chatBackground && (
             <button
               onClick={() => setChatBackground(null)}
@@ -193,10 +320,7 @@ function AppearanceSettings() {
             </button>
           )}
         </div>
-        <BackgroundPicker
-          selected={chatBackground}
-          onSelect={setChatBackground}
-        />
+        <BackgroundPicker selected={chatBackground} onSelect={setChatBackground} />
       </div>
     </div>
   );
@@ -205,16 +329,55 @@ function AppearanceSettings() {
 function BackgroundPicker({ selected, onSelect }: { selected: string | null; onSelect: (url: string | null) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [editingTags, setEditingTags] = useState<string | null>(null);
+  const [tagInput, setTagInput] = useState("");
+  const [renamingFile, setRenamingFile] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState("");
   const qc = useQueryClient();
 
   const { data: backgrounds } = useQuery({
     queryKey: ["backgrounds"],
-    queryFn: () => api.get<Array<{ filename: string; url: string }>>("/backgrounds"),
+    queryFn: () =>
+      api.get<Array<{ filename: string; url: string; originalName: string | null; tags: string[] }>>("/backgrounds"),
+  });
+
+  const { data: allTags } = useQuery({
+    queryKey: ["background-tags"],
+    queryFn: () => api.get<string[]>("/backgrounds/tags"),
   });
 
   const deleteBg = useMutation({
     mutationFn: (filename: string) => api.delete(`/backgrounds/${filename}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["backgrounds"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["backgrounds"] });
+      qc.invalidateQueries({ queryKey: ["background-tags"] });
+    },
+  });
+
+  const updateTags = useMutation({
+    mutationFn: ({ filename, tags }: { filename: string; tags: string[] }) =>
+      api.patch(`/backgrounds/${filename}/tags`, { tags }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["backgrounds"] });
+      qc.invalidateQueries({ queryKey: ["background-tags"] });
+    },
+  });
+
+  const renameBg = useMutation({
+    mutationFn: ({ filename, name }: { filename: string; name: string }) =>
+      api.patch<{ success: boolean; oldFilename: string; filename: string; url: string }>(
+        `/backgrounds/${filename}/rename`,
+        { name },
+      ),
+    onSuccess: (data) => {
+      // If the renamed file was the selected background, update the selection
+      const oldUrl = `/api/backgrounds/file/${encodeURIComponent(data.oldFilename)}`;
+      if (selected === oldUrl) {
+        onSelect(data.url);
+      }
+      setRenamingFile(null);
+      qc.invalidateQueries({ queryKey: ["backgrounds"] });
+    },
   });
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -238,6 +401,20 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
     }
   };
 
+  const addTag = (filename: string, currentTags: string[]) => {
+    const tag = tagInput
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9 _-]/g, "");
+    if (!tag || currentTags.includes(tag)) return;
+    updateTags.mutate({ filename, tags: [...currentTags, tag] });
+    setTagInput("");
+  };
+
+  const removeTag = (filename: string, currentTags: string[], tagToRemove: string) => {
+    updateTags.mutate({ filename, tags: currentTags.filter((t) => t !== tagToRemove) });
+  };
+
   return (
     <div className="flex flex-col gap-2">
       {/* Upload button */}
@@ -253,43 +430,161 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
 
       {/* Background grid */}
       {backgrounds && backgrounds.length > 0 && (
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="flex flex-col gap-2">
           {backgrounds.map((bg) => {
             const isSelected = selected === bg.url;
+            const isEditing = editingTags === bg.filename;
             return (
-              <div key={bg.filename} className="group relative">
-                <button
-                  onClick={() => onSelect(isSelected ? null : bg.url)}
-                  className={cn(
-                    "aspect-video w-full overflow-hidden rounded-lg border-2 transition-all",
-                    isSelected
-                      ? "border-[var(--primary)] shadow-md shadow-[var(--primary)]/20"
-                      : "border-transparent hover:border-[var(--muted-foreground)]/30",
-                  )}
-                >
-                  <img
-                    src={bg.url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                  {isSelected && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                      <Check size={16} className="text-white" />
+              <div key={bg.filename} className="flex flex-col gap-1">
+                {/* Thumbnail row */}
+                <div className="group relative flex gap-2">
+                  <button
+                    onClick={() => onSelect(isSelected ? null : bg.url)}
+                    className={cn(
+                      "aspect-video w-24 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                      isSelected
+                        ? "border-[var(--primary)] shadow-md shadow-[var(--primary)]/20"
+                        : "border-transparent hover:border-[var(--muted-foreground)]/30",
+                    )}
+                  >
+                    <img src={bg.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    {isSelected && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center bg-black/30"
+                        style={{ width: "6rem" }}
+                      >
+                        <Check size={14} className="text-white" />
+                      </div>
+                    )}
+                  </button>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 py-0.5">
+                    <div className="flex items-center gap-1">
+                      {renamingFile === bg.filename ? (
+                        <form
+                          className="flex min-w-0 flex-1 items-center gap-1"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (renameInput.trim())
+                              renameBg.mutate({ filename: bg.filename, name: renameInput.trim() });
+                          }}
+                        >
+                          <input
+                            type="text"
+                            value={renameInput}
+                            onChange={(e) => setRenameInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") setRenamingFile(null);
+                            }}
+                            className="w-full min-w-0 rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+                            autoFocus
+                          />
+                          <button
+                            type="submit"
+                            disabled={!renameInput.trim() || renameBg.isPending}
+                            className="shrink-0 rounded bg-[var(--primary)] px-1.5 py-0.5 text-[9px] text-[var(--primary-foreground)] disabled:opacity-40"
+                          >
+                            {renameBg.isPending ? "…" : "Save"}
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          <span className="truncate text-[10px] text-[var(--muted-foreground)]">{bg.filename}</span>
+                          <button
+                            onClick={() => {
+                              // Pre-fill with filename without extension
+                              const nameWithoutExt = bg.filename.replace(/\.[^.]+$/, "");
+                              setRenameInput(nameWithoutExt);
+                              setRenamingFile(bg.filename);
+                            }}
+                            className="shrink-0 rounded-md p-0.5 text-[var(--muted-foreground)] opacity-0 transition-opacity hover:text-[var(--primary)] group-hover:opacity-100"
+                            title="Rename"
+                          >
+                            <Pencil size={9} />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (selected === bg.url) onSelect(null);
+                          deleteBg.mutate(bg.filename);
+                        }}
+                        className="ml-auto shrink-0 rounded-md p-0.5 text-[var(--muted-foreground)] opacity-0 transition-opacity hover:text-[var(--destructive)] group-hover:opacity-100"
+                      >
+                        <Trash2 size={10} />
+                      </button>
                     </div>
-                  )}
-                </button>
-                {/* Delete overlay */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (selected === bg.url) onSelect(null);
-                    deleteBg.mutate(bg.filename);
-                  }}
-                  className="absolute right-0.5 top-0.5 rounded-md bg-black/60 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-                >
-                  <Trash2 size={10} className="text-white" />
-                </button>
+                    {/* Tags */}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {bg.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-0.5 rounded-full bg-[var(--secondary)] px-1.5 py-0 text-[9px] text-[var(--muted-foreground)]"
+                        >
+                          {tag}
+                          {isEditing && (
+                            <button
+                              onClick={() => removeTag(bg.filename, bg.tags, tag)}
+                              className="ml-0.5 hover:text-[var(--destructive)]"
+                            >
+                              <X size={8} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                      <button
+                        onClick={() => {
+                          setEditingTags(isEditing ? null : bg.filename);
+                          setTagInput("");
+                        }}
+                        className={cn(
+                          "rounded-full p-0.5 transition-colors",
+                          isEditing
+                            ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+                            : "text-[var(--muted-foreground)]/60 hover:text-[var(--primary)]",
+                        )}
+                        title="Edit tags"
+                      >
+                        <Tag size={9} />
+                      </button>
+                    </div>
+                    {/* Tag input */}
+                    {isEditing && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={tagInput}
+                          onChange={(e) => setTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addTag(bg.filename, bg.tags);
+                            }
+                            if (e.key === "Escape") setEditingTags(null);
+                          }}
+                          placeholder="Add tag…"
+                          className="w-full min-w-0 rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+                          autoFocus
+                          list={`tag-suggestions-${bg.filename}`}
+                        />
+                        <datalist id={`tag-suggestions-${bg.filename}`}>
+                          {(allTags ?? [])
+                            .filter((t) => !bg.tags.includes(t))
+                            .map((t) => (
+                              <option key={t} value={t} />
+                            ))}
+                        </datalist>
+                        <button
+                          onClick={() => addTag(bg.filename, bg.tags)}
+                          disabled={!tagInput.trim()}
+                          className="shrink-0 rounded bg-[var(--primary)] px-1.5 py-0.5 text-[9px] text-[var(--primary-foreground)] disabled:opacity-40"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -299,9 +594,7 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
       {(!backgrounds || backgrounds.length === 0) && (
         <div className="flex flex-col items-center gap-1.5 py-4 text-center">
           <Image size={20} className="text-[var(--muted-foreground)]/40" />
-          <p className="text-[10px] text-[var(--muted-foreground)]">
-            No backgrounds uploaded yet
-          </p>
+          <p className="text-[10px] text-[var(--muted-foreground)]">No backgrounds uploaded yet</p>
         </div>
       )}
     </div>
@@ -421,8 +714,8 @@ function ThemesSettings() {
       <div className="rounded-lg bg-[var(--secondary)]/50 p-2.5 text-[10px] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
         <strong>Tip:</strong> CSS themes can override any CSS variable (e.g.{" "}
         <code className="rounded bg-[var(--secondary)] px-1">--background</code>,{" "}
-        <code className="rounded bg-[var(--secondary)] px-1">--primary</code>) or add custom styles.
-        JSON themes should have <code className="rounded bg-[var(--secondary)] px-1">{`{ "name": "...", "css": "..." }`}</code> format.
+        <code className="rounded bg-[var(--secondary)] px-1">--primary</code>) or add custom styles. JSON themes should
+        have <code className="rounded bg-[var(--secondary)] px-1">{`{ "name": "...", "css": "..." }`}</code> format.
       </div>
     </div>
   );
@@ -516,9 +809,7 @@ function ExtensionsSettings() {
             <div className="flex flex-1 flex-col min-w-0">
               <span className="truncate font-medium">{ext.name}</span>
               {ext.description && (
-                <span className="truncate text-[10px] text-[var(--muted-foreground)]">
-                  {ext.description}
-                </span>
+                <span className="truncate text-[10px] text-[var(--muted-foreground)]">{ext.description}</span>
               )}
             </div>
             <button
@@ -541,8 +832,8 @@ function ExtensionsSettings() {
       {/* Info box */}
       <div className="rounded-lg bg-[var(--secondary)]/50 p-2.5 text-[10px] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
         <strong>JSON format:</strong>{" "}
-        <code className="rounded bg-[var(--secondary)] px-1">{`{ "name": "...", "description": "...", "css": "..." }`}</code>.
-        Extensions can inject custom CSS to modify the UI.
+        <code className="rounded bg-[var(--secondary)] px-1">{`{ "name": "...", "description": "...", "css": "..." }`}</code>
+        . Extensions can inject custom CSS to modify the UI.
       </div>
     </div>
   );
@@ -550,51 +841,143 @@ function ExtensionsSettings() {
 
 function ImportSettings() {
   const openModal = useUIStore((s) => s.openModal);
+  const qc = useQueryClient();
+  const setActiveChatId = useChatStore((s) => s.setActiveChatId);
+
+  const handleMarinaraImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const envelope = JSON.parse(text);
+      const res = await fetch("/api/import/marinara", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(envelope),
+      });
+      const data = await res.json();
+      if (data.success) {
+        qc.invalidateQueries();
+        alert(`Imported ${data.name ?? data.type} successfully!`);
+      } else {
+        alert(`Import failed: ${data.error ?? "Unknown error"}`);
+      }
+    } catch {
+      alert("Import failed. Make sure this is a valid .marinara.json file.");
+    }
+    e.target.value = "";
+  };
 
   return (
     <div className="flex flex-col gap-3 animate-fade-in-up">
       <div className="text-xs text-[var(--muted-foreground)]">
-        Import data from SillyTavern or other tools.
+        Import data from Marinara exports, SillyTavern, or other tools.
       </div>
 
+      {/* Marinara import */}
+      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500/20 to-orange-500/20 px-3 py-3 text-xs font-semibold ring-1 ring-pink-500/30 transition-all hover:ring-pink-500/50 active:scale-[0.98]">
+        <Upload size={16} />
+        Import Marinara File (.marinara.json)
+        <input type="file" accept=".json" onChange={handleMarinaraImport} className="hidden" />
+      </label>
+
+      <div className="retro-divider" />
+
       {/* Bulk ST import */}
+      <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+        SillyTavern Import
+      </span>
+
       <button
         onClick={() => openModal("st-bulk-import")}
         className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-500/20 to-purple-500/20 px-3 py-3 text-xs font-semibold ring-1 ring-violet-500/30 transition-all hover:ring-violet-500/50 active:scale-[0.98]"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
         Import from SillyTavern Folder
       </button>
 
-      <div className="retro-divider" />
-
-      {/* Individual file imports */}
-      <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">Or import individual files</span>
-
       <div className="flex flex-col gap-2">
-        <ImportButton label="Import Character (JSON/PNG)" accept=".json,.png" endpoint="/import/character" />
-        <ImportButton label="Import Chat (JSONL)" accept=".jsonl" endpoint="/import/chat" />
-        <ImportButton label="Import Preset (JSON)" accept=".json" endpoint="/import/preset" />
-        <ImportButton label="Import Lorebook (JSON)" accept=".json" endpoint="/import/lorebook" />
+        <ImportButton
+          label="Import Character (JSON/PNG)"
+          accept=".json,.png"
+          endpoint="/import/st-character"
+          mode="json"
+        />
+        <ImportButton
+          label="Import Chat (JSONL)"
+          accept=".jsonl"
+          endpoint="/import/st-chat"
+          mode="file"
+          onImported={(data) => {
+            qc.invalidateQueries({ queryKey: chatKeys.list() });
+            if (data.chatId) setActiveChatId(data.chatId);
+          }}
+        />
+        <ImportButton label="Import Preset (JSON)" accept=".json" endpoint="/import/st-preset" mode="json" />
+        <ImportButton label="Import Lorebook (JSON)" accept=".json" endpoint="/import/st-lorebook" mode="json" />
       </div>
     </div>
   );
 }
 
-function ImportButton({ label, accept, endpoint }: { label: string; accept: string; endpoint: string }) {
+function ImportButton({
+  label,
+  accept,
+  endpoint,
+  mode = "file",
+  onImported,
+}: {
+  label: string;
+  accept: string;
+  endpoint: string;
+  mode?: "file" | "json";
+  onImported?: (data: any) => void;
+}) {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
     try {
-      const res = await fetch(`/api${endpoint}`, {
-        method: "POST",
-        body: formData,
-      });
+      let res: Response;
+      if (mode === "json") {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        // Pass filename as fallback name for lorebook imports
+        if (endpoint.includes("lorebook")) {
+          json.__filename = file.name.replace(/\.json$/i, "");
+        }
+        res = await fetch(`/api${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(json),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append("file", file);
+        res = await fetch(`/api${endpoint}`, {
+          method: "POST",
+          body: formData,
+        });
+      }
       const data = await res.json();
       if (data.success) {
-        alert(`Imported successfully!`);
+        if (onImported) {
+          onImported(data);
+        } else {
+          alert(`Imported successfully!`);
+        }
       } else {
         alert(`Import failed: ${data.error ?? "Unknown error"}`);
       }
@@ -613,33 +996,45 @@ function ImportButton({ label, accept, endpoint }: { label: string; accept: stri
 }
 
 function AdvancedSettings() {
-  const enableStreaming = useUIStore((s) => s.enableStreaming);
-  const setEnableStreaming = useUIStore((s) => s.setEnableStreaming);
-  const autoSaveChats = useUIStore((s) => s.autoSaveChats);
-  const setAutoSaveChats = useUIStore((s) => s.setAutoSaveChats);
   const debugMode = useUIStore((s) => s.debugMode);
   const setDebugMode = useUIStore((s) => s.setDebugMode);
   const messageGrouping = useUIStore((s) => s.messageGrouping);
   const setMessageGrouping = useUIStore((s) => s.setMessageGrouping);
   const showTimestamps = useUIStore((s) => s.showTimestamps);
   const setShowTimestamps = useUIStore((s) => s.setShowTimestamps);
-  const confirmBeforeDelete = useUIStore((s) => s.confirmBeforeDelete);
-  const setConfirmBeforeDelete = useUIStore((s) => s.setConfirmBeforeDelete);
+  const showModelName = useUIStore((s) => s.showModelName);
+  const setShowModelName = useUIStore((s) => s.setShowModelName);
   const clearAllData = useClearAllData();
   const [confirmStep, setConfirmStep] = useState(0); // 0=idle, 1=first click, 2=confirmed
 
   return (
     <div className="flex flex-col gap-3 animate-fade-in-up">
-      <div className="text-xs text-[var(--muted-foreground)]">
-        Advanced settings for power users.
-      </div>
+      <div className="text-xs text-[var(--muted-foreground)]">Advanced settings for power users.</div>
 
-      <ToggleSetting label="Enable streaming responses" checked={enableStreaming} onChange={setEnableStreaming} help="When on, AI responses appear word-by-word as they're generated. When off, the full response appears at once after completion." />
-      <ToggleSetting label="Auto-save chat history" checked={autoSaveChats} onChange={setAutoSaveChats} help="Automatically saves your chats so you don't lose progress. Disable if you prefer to save manually." />
-      <ToggleSetting label="Group consecutive messages" checked={messageGrouping} onChange={setMessageGrouping} help="Combines multiple messages from the same sender into a visual group, reducing clutter in the chat." />
-      <ToggleSetting label="Show message timestamps" checked={showTimestamps} onChange={setShowTimestamps} help="Displays the date and time each message was sent next to it in the chat." />
-      <ToggleSetting label="Confirm before deleting" checked={confirmBeforeDelete} onChange={setConfirmBeforeDelete} help="Shows a confirmation dialog before permanently deleting chats, characters, or other items. Recommended to keep on." />
-      <ToggleSetting label="Debug mode (log prompts to console)" checked={debugMode} onChange={setDebugMode} help="Logs the full prompt and API request/response to the browser console. Useful for advanced users debugging prompt formatting." />
+      <ToggleSetting
+        label="Group consecutive messages"
+        checked={messageGrouping}
+        onChange={setMessageGrouping}
+        help="Combines multiple messages from the same sender into a visual group, reducing clutter in the chat."
+      />
+      <ToggleSetting
+        label="Show message timestamps"
+        checked={showTimestamps}
+        onChange={setShowTimestamps}
+        help="Displays the date and time each message was sent next to it in the chat."
+      />
+      <ToggleSetting
+        label="Show model name on messages"
+        checked={showModelName}
+        onChange={setShowModelName}
+        help="Displays which AI model generated each response, shown as a small label on assistant messages."
+      />
+      <ToggleSetting
+        label="Debug mode (log prompts to console)"
+        checked={debugMode}
+        onChange={setDebugMode}
+        help="Logs the full prompt and API request/response to the browser console. Useful for advanced users debugging prompt formatting."
+      />
 
       {/* ── Danger Zone ── */}
       <div className="retro-divider" />
@@ -700,7 +1095,17 @@ function AdvancedSettings() {
   );
 }
 
-function ToggleSetting({ label, checked, onChange, help }: { label: string; checked: boolean; onChange: (v: boolean) => void; help?: string }) {
+function ToggleSetting({
+  label,
+  checked,
+  onChange,
+  help,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  help?: string;
+}) {
   return (
     <label className="flex items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50">
       <input
@@ -710,7 +1115,11 @@ function ToggleSetting({ label, checked, onChange, help }: { label: string; chec
         className="h-3.5 w-3.5 rounded border-[var(--border)] accent-[var(--primary)]"
       />
       <span className="text-xs">{label}</span>
-      {help && <span onClick={(e) => e.preventDefault()}><HelpTooltip text={help} /></span>}
+      {help && (
+        <span onClick={(e) => e.preventDefault()}>
+          <HelpTooltip text={help} />
+        </span>
+      )}
     </label>
   );
 }

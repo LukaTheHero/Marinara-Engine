@@ -35,6 +35,7 @@ export function usePresets() {
   return useQuery({
     queryKey: presetKeys.list(),
     queryFn: () => api.get<PromptPreset[]>("/prompts"),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -43,6 +44,7 @@ export function usePreset(id: string | null) {
     queryKey: presetKeys.detail(id ?? ""),
     queryFn: () => api.get<PromptPreset>(`/prompts/${id}`),
     enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -58,6 +60,7 @@ export function usePresetFull(id: string | null) {
         choiceBlocks: ChoiceBlock[];
       }>(`/prompts/${id}/full`),
     enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -65,6 +68,7 @@ export function useDefaultPreset() {
   return useQuery({
     queryKey: presetKeys.default(),
     queryFn: () => api.get<PromptPreset | null>("/prompts/default"),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -199,11 +203,7 @@ export function useCreateSection() {
 export function useUpdateSection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      presetId,
-      sectionId,
-      ...data
-    }: { presetId: string; sectionId: string } & Record<string, unknown>) =>
+    mutationFn: ({ presetId, sectionId, ...data }: { presetId: string; sectionId: string } & Record<string, unknown>) =>
       api.patch<PromptSection>(`/prompts/${presetId}/sections/${sectionId}`, data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.sections(variables.presetId) });
@@ -229,70 +229,102 @@ export function useReorderSections() {
   return useMutation({
     mutationFn: ({ presetId, sectionIds }: { presetId: string; sectionIds: string[] }) =>
       api.put(`/prompts/${presetId}/sections/reorder`, { sectionIds }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: presetKeys.sections(variables.presetId) });
-      qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
+    onMutate: async ({ presetId, sectionIds }) => {
+      await qc.cancelQueries({ queryKey: presetKeys.full(presetId) });
+      const prev = qc.getQueryData(presetKeys.full(presetId)) as any;
+      if (prev?.preset?.sectionOrder) {
+        qc.setQueryData(presetKeys.full(presetId), {
+          ...prev,
+          preset: { ...prev.preset, sectionOrder: JSON.stringify(sectionIds) },
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, { presetId }, ctx) => {
+      if (ctx?.prev) qc.setQueryData(presetKeys.full(presetId), ctx.prev);
+    },
+    onSettled: (_data, _err, { presetId }) => {
+      qc.invalidateQueries({ queryKey: presetKeys.sections(presetId) });
+      qc.invalidateQueries({ queryKey: presetKeys.full(presetId) });
     },
   });
 }
 
 // ═══════════════════════════════════════════════
-//  Choice Blocks
+//  Preset Variables (Choice Blocks)
 // ═══════════════════════════════════════════════
 
-export function useSectionChoice(presetId: string | null, sectionId: string | null) {
+export function usePresetVariables(presetId: string | null) {
   return useQuery({
-    queryKey: presetKeys.sectionChoice(sectionId ?? ""),
-    queryFn: () => api.get<ChoiceBlock | null>(`/prompts/${presetId}/sections/${sectionId}/choice`),
-    enabled: !!presetId && !!sectionId,
+    queryKey: presetKeys.choiceBlocks(presetId ?? ""),
+    queryFn: () => api.get<ChoiceBlock[]>(`/prompts/${presetId}/variables`),
+    enabled: !!presetId,
   });
 }
 
-export function useCreateChoice() {
+export function useCreateVariable() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      presetId,
-      sectionId,
-      ...data
-    }: { presetId: string; sectionId: string } & Record<string, unknown>) =>
-      api.post<ChoiceBlock>(`/prompts/${presetId}/sections/${sectionId}/choice`, data),
+    mutationFn: ({ presetId, ...data }: { presetId: string } & Record<string, unknown>) =>
+      api.post<ChoiceBlock>(`/prompts/${presetId}/variables`, data),
     onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: presetKeys.sectionChoice(variables.sectionId) });
+      qc.invalidateQueries({ queryKey: presetKeys.choiceBlocks(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
     },
   });
 }
 
-export function useUpdateChoice() {
+export function useUpdateVariable() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
       presetId,
-      sectionId,
-      choiceId,
+      variableId,
       ...data
-    }: { presetId: string; sectionId: string; choiceId: string } & Record<string, unknown>) =>
-      api.patch<ChoiceBlock>(`/prompts/${presetId}/sections/${sectionId}/choice/${choiceId}`, data),
+    }: { presetId: string; variableId: string } & Record<string, unknown>) =>
+      api.patch<ChoiceBlock>(`/prompts/${presetId}/variables/${variableId}`, data),
     onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: presetKeys.sectionChoice(variables.sectionId) });
+      qc.invalidateQueries({ queryKey: presetKeys.choiceBlocks(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
     },
   });
 }
 
-export function useDeleteChoice() {
+export function useDeleteVariable() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      presetId,
-      sectionId,
-      choiceId,
-    }: { presetId: string; sectionId: string; choiceId: string }) =>
-      api.delete(`/prompts/${presetId}/sections/${sectionId}/choice/${choiceId}`),
+    mutationFn: ({ presetId, variableId }: { presetId: string; variableId: string }) =>
+      api.delete(`/prompts/${presetId}/variables/${variableId}`),
     onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: presetKeys.sectionChoice(variables.sectionId) });
+      qc.invalidateQueries({ queryKey: presetKeys.choiceBlocks(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
+    },
+  });
+}
+
+export function useReorderVariables() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ presetId, variableIds }: { presetId: string; variableIds: string[] }) =>
+      api.put(`/prompts/${presetId}/variables/reorder`, { variableIds }),
+    onMutate: async ({ presetId, variableIds }) => {
+      await qc.cancelQueries({ queryKey: presetKeys.full(presetId) });
+      const prev = qc.getQueryData(presetKeys.full(presetId)) as any;
+      if (prev?.choiceBlocks) {
+        const idOrder = new Map(variableIds.map((id, i) => [id, i]));
+        const sorted = [...prev.choiceBlocks].sort(
+          (a: any, b: any) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0),
+        );
+        qc.setQueryData(presetKeys.full(presetId), { ...prev, choiceBlocks: sorted });
+      }
+      return { prev };
+    },
+    onError: (_err, { presetId }, ctx) => {
+      if (ctx?.prev) qc.setQueryData(presetKeys.full(presetId), ctx.prev);
+    },
+    onSettled: (_data, _err, { presetId }) => {
+      qc.invalidateQueries({ queryKey: presetKeys.choiceBlocks(presetId) });
+      qc.invalidateQueries({ queryKey: presetKeys.full(presetId) });
     },
   });
 }

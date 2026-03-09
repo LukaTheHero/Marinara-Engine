@@ -47,8 +47,16 @@ function HPBar({ current, max, isParty }: { current: number; max: number; isPart
           isDead
             ? "bg-gray-600"
             : isParty
-              ? pct > 50 ? "bg-emerald-500" : pct > 25 ? "bg-yellow-500" : "bg-red-500"
-              : pct > 50 ? "bg-red-500" : pct > 25 ? "bg-orange-500" : "bg-red-300",
+              ? pct > 50
+                ? "bg-emerald-500"
+                : pct > 25
+                  ? "bg-yellow-500"
+                  : "bg-red-500"
+              : pct > 50
+                ? "bg-red-500"
+                : pct > 25
+                  ? "bg-orange-500"
+                  : "bg-red-300",
         )}
         initial={false}
         animate={{ width: `${pct}%` }}
@@ -97,9 +105,7 @@ function EnemyCard({ enemy, index, isDead }: { enemy: CombatEnemy; index: number
         <HPBar current={enemy.hp} max={enemy.maxHp} />
       </div>
       <StatusBadges statuses={enemy.statuses} />
-      {enemy.description && (
-        <p className="mt-1 text-[10px] leading-tight text-white/40">{enemy.description}</p>
-      )}
+      {enemy.description && <p className="mt-1 text-[10px] leading-tight text-white/40">{enemy.description}</p>}
       {isDead && (
         <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40">
           <Skull size={20} className="text-red-400/60" />
@@ -125,10 +131,12 @@ function PartyCard({ member }: { member: CombatPartyMember }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: isDead ? 0.4 : 1, y: 0 }}
     >
-      <div className={cn(
-        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-        member.isPlayer ? "bg-blue-500/20 text-blue-300" : "bg-emerald-500/20 text-emerald-300",
-      )}>
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+          member.isPlayer ? "bg-blue-500/20 text-blue-300" : "bg-emerald-500/20 text-emerald-300",
+        )}
+      >
         {member.name[0]}
       </div>
       <div className="min-w-0 flex-1">
@@ -212,7 +220,9 @@ function TargetSelection({ attackType, enemies, party, onSelect, onCancel }: Tar
                   <span className="text-lg">{enemy.sprite || "👹"}</span>
                   <div className="flex-1">
                     <div className="text-xs font-bold text-white/90">{enemy.name}</div>
-                    <div className="text-[10px] text-white/40">{enemy.hp}/{enemy.maxHp} HP</div>
+                    <div className="text-[10px] text-white/40">
+                      {enemy.hp}/{enemy.maxHp} HP
+                    </div>
                   </div>
                 </button>
               ))}
@@ -232,7 +242,9 @@ function TargetSelection({ attackType, enemies, party, onSelect, onCancel }: Tar
                     <div className="text-xs font-bold text-white/90">
                       {member.name} {member.isPlayer && "(You)"}
                     </div>
-                    <div className="text-[10px] text-white/40">{member.hp}/{member.maxHp} HP</div>
+                    <div className="text-[10px] text-white/40">
+                      {member.hp}/{member.maxHp} HP
+                    </div>
                   </div>
                 </button>
               ))}
@@ -465,9 +477,7 @@ function PlayerControls({ onAction }: { onAction: (text: string) => void }) {
     if (!targetSelection) return;
     const { attackName } = targetSelection;
     const actionText =
-      target === "all-enemies"
-        ? `Uses ${attackName} targeting all enemies!`
-        : `Uses ${attackName} on ${target}!`;
+      target === "all-enemies" ? `Uses ${attackName} targeting all enemies!` : `Uses ${attackName} on ${target}!`;
     setTargetSelection(null);
     onAction(actionText);
   };

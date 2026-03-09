@@ -26,20 +26,11 @@ export async function parsePngCharacterCard(
   let offset = 8; // skip signature
   while (offset < bytes.length) {
     // Read chunk length (4 bytes, big-endian)
-    const length =
-      (bytes[offset] << 24) |
-      (bytes[offset + 1] << 16) |
-      (bytes[offset + 2] << 8) |
-      bytes[offset + 3];
+    const length = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
     offset += 4;
 
     // Read chunk type (4 bytes)
-    const type = String.fromCharCode(
-      bytes[offset],
-      bytes[offset + 1],
-      bytes[offset + 2],
-      bytes[offset + 3],
-    );
+    const type = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
     offset += 4;
 
     if (type === "tEXt") {

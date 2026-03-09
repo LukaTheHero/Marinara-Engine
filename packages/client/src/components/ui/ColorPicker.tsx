@@ -18,11 +18,26 @@ interface ColorPickerProps {
 
 /** Preset palette colors */
 const PRESETS = [
-  "#ff6b6b", "#ee5a24", "#f0932b", "#ffd93d",
-  "#6ab04c", "#22a6b3", "#4834d4", "#6c5ce7",
-  "#e056fd", "#fd79a8", "#fdcb6e", "#00cec9",
-  "#2ed573", "#1e90ff", "#a29bfe", "#ff7979",
-  "#badc58", "#7ed6df", "#e17055", "#d63031",
+  "#ff6b6b",
+  "#ee5a24",
+  "#f0932b",
+  "#ffd93d",
+  "#6ab04c",
+  "#22a6b3",
+  "#4834d4",
+  "#6c5ce7",
+  "#e056fd",
+  "#fd79a8",
+  "#fdcb6e",
+  "#00cec9",
+  "#2ed573",
+  "#1e90ff",
+  "#a29bfe",
+  "#ff7979",
+  "#badc58",
+  "#7ed6df",
+  "#e17055",
+  "#d63031",
 ];
 
 /** Preset gradients */
@@ -148,9 +163,7 @@ export function ColorPicker({ value, onChange, gradient = false, label, helpText
           </button>
         )}
       </div>
-      {helpText && (
-        <p className="text-[10px] text-[var(--muted-foreground)]/70">{helpText}</p>
-      )}
+      {helpText && <p className="text-[10px] text-[var(--muted-foreground)]/70">{helpText}</p>}
 
       {/* Preview + trigger */}
       <button
@@ -164,7 +177,7 @@ export function ColorPicker({ value, onChange, gradient = false, label, helpText
           className="h-8 w-8 shrink-0 rounded-lg ring-1 ring-[var(--border)]"
           style={{
             ...displayStyle,
-            ...((!value) && {
+            ...(!value && {
               backgroundImage: "repeating-conic-gradient(var(--border) 0% 25%, transparent 0% 50%)",
               backgroundSize: "8px 8px",
             }),

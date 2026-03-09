@@ -29,6 +29,8 @@ export const personas = sqliteTable("personas", {
   dialogueColor: text("dialogue_color").notNull().default(""),
   /** Chat bubble background color */
   boxColor: text("box_color").notNull().default(""),
+  /** Persona stats config (JSON) */
+  personaStats: text("persona_stats").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

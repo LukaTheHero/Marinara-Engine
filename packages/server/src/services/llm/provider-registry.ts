@@ -9,11 +9,7 @@ import type { BaseLLMProvider } from "./base-provider.js";
 /**
  * Factory that creates the correct LLM provider for a given provider type.
  */
-export function createLLMProvider(
-  provider: string,
-  baseUrl: string,
-  apiKey: string,
-): BaseLLMProvider {
+export function createLLMProvider(provider: string, baseUrl: string, apiKey: string): BaseLLMProvider {
   switch (provider) {
     case "openai":
     case "openrouter":

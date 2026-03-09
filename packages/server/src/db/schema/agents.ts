@@ -20,7 +20,9 @@ export const agentConfigs = sqliteTable("agent_configs", {
 
 export const agentRuns = sqliteTable("agent_runs", {
   id: text("id").primaryKey(),
-  agentConfigId: text("agent_config_id").notNull().references(() => agentConfigs.id),
+  agentConfigId: text("agent_config_id")
+    .notNull()
+    .references(() => agentConfigs.id),
   chatId: text("chat_id").notNull(),
   messageId: text("message_id").notNull(),
   resultType: text("result_type").notNull(),
@@ -36,7 +38,9 @@ export const agentRuns = sqliteTable("agent_runs", {
 /** Persistent memory for agents (key-value per agent per chat). */
 export const agentMemory = sqliteTable("agent_memory", {
   id: text("id").primaryKey(),
-  agentConfigId: text("agent_config_id").notNull().references(() => agentConfigs.id),
+  agentConfigId: text("agent_config_id")
+    .notNull()
+    .references(() => agentConfigs.id),
   chatId: text("chat_id").notNull(),
   key: text("key").notNull(),
   value: text("value").notNull().default(""),

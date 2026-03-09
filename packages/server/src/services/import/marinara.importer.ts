@@ -1,0 +1,265 @@
+// ──────────────────────────────────────────────
+// Import: Marinara Engine native format (.marinara.json)
+// ──────────────────────────────────────────────
+import type { DB } from "../../db/connection.js";
+import type { ExportEnvelope, ExportType } from "@rpg-engine/shared";
+import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createLorebooksStorage } from "../storage/lorebooks.storage.js";
+import { createPromptsStorage } from "../storage/prompts.storage.js";
+
+/**
+ * Import a Marinara `.marinara.json` export envelope.
+ * Dispatches to the correct handler based on the `type` field.
+ */
+export async function importMarinara(
+  envelope: ExportEnvelope,
+  db: DB,
+): Promise<{ success: boolean; type: ExportType; id?: string; name?: string; error?: string }> {
+  if (!envelope || typeof envelope !== "object" || !envelope.type || envelope.version !== 1) {
+    return { success: false, type: "marinara_character" as ExportType, error: "Invalid Marinara export file" };
+  }
+
+  switch (envelope.type) {
+    case "marinara_character":
+      return importCharacter(envelope.data, db);
+    case "marinara_persona":
+      return importPersona(envelope.data, db);
+    case "marinara_lorebook":
+      return importLorebook(envelope.data, db);
+    case "marinara_preset":
+      return importPreset(envelope.data, db);
+    default:
+      return { success: false, type: envelope.type, error: `Unknown export type: ${envelope.type}` };
+  }
+}
+
+// ── Character ────────────────────────────────
+
+async function importCharacter(data: unknown, db: DB) {
+  const storage = createCharactersStorage(db);
+  const d = data as { data?: Record<string, unknown>; spec?: string };
+  const charData = d?.data;
+  if (!charData || typeof charData !== "object") {
+    return { success: false, type: "marinara_character" as const, error: "Invalid character data" };
+  }
+  const result = await storage.create(charData as any);
+  return {
+    success: true,
+    type: "marinara_character" as const,
+    id: result?.id,
+    name: (charData as any).name ?? "Imported character",
+  };
+}
+
+// ── Persona ──────────────────────────────────
+
+async function importPersona(data: unknown, db: DB) {
+  const storage = createCharactersStorage(db);
+  const d = data as Record<string, unknown>;
+  if (!d || typeof d !== "object") {
+    return { success: false, type: "marinara_persona" as const, error: "Invalid persona data" };
+  }
+  const result = await storage.createPersona(
+    String(d.name ?? "Imported Persona"),
+    String(d.description ?? ""),
+    undefined,
+    {
+      personality: String(d.personality ?? ""),
+      scenario: String(d.scenario ?? ""),
+      backstory: String(d.backstory ?? ""),
+      appearance: String(d.appearance ?? ""),
+      nameColor: String(d.nameColor ?? ""),
+      dialogueColor: String(d.dialogueColor ?? ""),
+      boxColor: String(d.boxColor ?? ""),
+    },
+  );
+  return {
+    success: true,
+    type: "marinara_persona" as const,
+    id: result?.id,
+    name: String(d.name ?? "Imported Persona"),
+  };
+}
+
+// ── Lorebook ─────────────────────────────────
+
+async function importLorebook(data: unknown, db: DB) {
+  const storage = createLorebooksStorage(db);
+  const d = data as { lorebook?: Record<string, unknown>; entries?: Record<string, unknown>[] };
+  if (!d?.lorebook) {
+    return { success: false, type: "marinara_lorebook" as const, error: "Invalid lorebook data" };
+  }
+  const lb = d.lorebook;
+  const newLb = (await storage.create({
+    name: String(lb.name ?? "Imported Lorebook"),
+    description: String(lb.description ?? ""),
+    category: (lb.category as any) ?? "uncategorized",
+    scanDepth: Number(lb.scanDepth ?? 2),
+    tokenBudget: Number(lb.tokenBudget ?? 2048),
+    recursiveScanning: Boolean(lb.recursiveScanning),
+    enabled: lb.enabled !== false,
+    generatedBy: "import",
+  })) as Record<string, unknown> | null;
+
+  if (newLb && Array.isArray(d.entries) && d.entries.length > 0) {
+    const entries = d.entries.map((e) => ({
+      name: String(e.name ?? ""),
+      content: String(e.content ?? ""),
+      keys: Array.isArray(e.keys) ? e.keys.map(String) : [],
+      secondaryKeys: Array.isArray(e.secondaryKeys) ? e.secondaryKeys.map(String) : [],
+      enabled: e.enabled !== false,
+      constant: Boolean(e.constant),
+      selective: Boolean(e.selective),
+      selectiveLogic: (e.selectiveLogic as any) ?? "and",
+      probability: e.probability != null ? Number(e.probability) : null,
+      scanDepth: e.scanDepth != null ? Number(e.scanDepth) : null,
+      matchWholeWords: Boolean(e.matchWholeWords),
+      caseSensitive: Boolean(e.caseSensitive),
+      useRegex: Boolean(e.useRegex),
+      position: Number(e.position ?? 0),
+      depth: Number(e.depth ?? 4),
+      order: Number(e.order ?? 100),
+      role: (e.role as any) ?? "system",
+      sticky: e.sticky != null ? Number(e.sticky) : null,
+      cooldown: e.cooldown != null ? Number(e.cooldown) : null,
+      delay: e.delay != null ? Number(e.delay) : null,
+      group: String(e.group ?? ""),
+      groupWeight: e.groupWeight != null ? Number(e.groupWeight) : null,
+      tag: String(e.tag ?? ""),
+      relationships: (e.relationships as any) ?? {},
+      dynamicState: (e.dynamicState as any) ?? {},
+      activationConditions: (e.activationConditions as any) ?? [],
+      schedule: (e.schedule as any) ?? null,
+    }));
+    await storage.bulkCreateEntries(newLb.id as string, entries);
+  }
+
+  return {
+    success: true,
+    type: "marinara_lorebook" as const,
+    id: newLb?.id as string,
+    name: String(lb.name ?? "Imported Lorebook"),
+  };
+}
+
+// ── Preset ───────────────────────────────────
+
+async function importPreset(data: unknown, db: DB) {
+  const storage = createPromptsStorage(db);
+  const d = data as {
+    preset?: Record<string, unknown>;
+    sections?: Record<string, unknown>[];
+    groups?: Record<string, unknown>[];
+    choiceBlocks?: Record<string, unknown>[];
+  };
+  if (!d?.preset) {
+    return { success: false, type: "marinara_preset" as const, error: "Invalid preset data" };
+  }
+  const p = d.preset;
+
+  // Create the base preset
+  const newPreset = await storage.create({
+    name: String(p.name ?? "Imported Preset"),
+    description: String(p.description ?? ""),
+    variableGroups: safeParseJson(p.variableGroups, []),
+    variableValues: safeParseJson(p.variableValues, {}),
+    parameters: safeParseJson(p.parameters, {}),
+    wrapFormat: (p.wrapFormat as any) ?? "xml",
+    author: String(p.author ?? ""),
+  });
+  if (!newPreset) {
+    return { success: false, type: "marinara_preset" as const, error: "Failed to create preset" };
+  }
+
+  // Re-create groups with old→new ID mapping
+  const groupMap = new Map<string, string>();
+  if (Array.isArray(d.groups)) {
+    for (const g of d.groups) {
+      const newGroup = await storage.createGroup({
+        presetId: newPreset.id,
+        name: String(g.name ?? ""),
+        parentGroupId: null, // fixed below
+        order: Number(g.order ?? 100),
+        enabled: g.enabled === true || g.enabled === "true",
+      });
+      if (newGroup) groupMap.set(String(g.id), newGroup.id);
+    }
+    // Fix parent references
+    for (const g of d.groups) {
+      if (g.parentGroupId && groupMap.has(String(g.parentGroupId))) {
+        const newGId = groupMap.get(String(g.id));
+        if (newGId) {
+          await storage.updateGroup(newGId, {
+            parentGroupId: groupMap.get(String(g.parentGroupId))!,
+          });
+        }
+      }
+    }
+  }
+
+  // Re-create sections with old→new ID mapping
+  const sectionMap = new Map<string, string>();
+  if (Array.isArray(d.sections)) {
+    for (const s of d.sections) {
+      const groupId = s.groupId ? (groupMap.get(String(s.groupId)) ?? null) : null;
+      const newSection = await storage.createSection({
+        presetId: newPreset.id,
+        identifier: String(s.identifier ?? ""),
+        name: String(s.name ?? ""),
+        content: String(s.content ?? ""),
+        role: (s.role as any) ?? "system",
+        enabled: s.enabled === true || s.enabled === "true",
+        isMarker: s.isMarker === true || s.isMarker === "true",
+        groupId,
+        markerConfig: s.markerConfig ? safeParseJson(s.markerConfig, null) : null,
+        injectionPosition: (s.injectionPosition as any) ?? "ordered",
+        injectionDepth: Number(s.injectionDepth ?? 0),
+        injectionOrder: Number(s.injectionOrder ?? 100),
+        forbidOverrides: s.forbidOverrides === true || s.forbidOverrides === "true",
+      });
+      if (newSection) sectionMap.set(String(s.id), newSection.id);
+    }
+  }
+
+  // Re-create choice blocks
+  if (Array.isArray(d.choiceBlocks)) {
+    for (const v of d.choiceBlocks) {
+      await storage.createChoiceBlock({
+        presetId: newPreset.id,
+        variableName: String(v.variableName ?? ""),
+        question: String(v.question ?? ""),
+        options: safeParseJson(v.options, []),
+        multiSelect: v.multiSelect === true || v.multiSelect === "true",
+        separator: String(v.separator ?? ", "),
+        randomPick: v.randomPick === true || v.randomPick === "true",
+      });
+    }
+  }
+
+  // Remap section/group order arrays
+  const oldSectionOrder = safeParseJson(p.sectionOrder, []) as string[];
+  const newSectionOrder = oldSectionOrder.map((sid) => sectionMap.get(sid)).filter(Boolean) as string[];
+  const oldGroupOrder = safeParseJson(p.groupOrder, []) as string[];
+  const newGroupOrder = oldGroupOrder.map((gid) => groupMap.get(gid)).filter(Boolean) as string[];
+  await storage.update(newPreset.id, { sectionOrder: newSectionOrder, groupOrder: newGroupOrder });
+
+  return {
+    success: true,
+    type: "marinara_preset" as const,
+    id: newPreset.id,
+    name: String(p.name ?? "Imported Preset"),
+  };
+}
+
+/** Safely parse a value that may be a JSON string or already an object. */
+function safeParseJson<T>(value: unknown, fallback: T): T {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return value as T;
+}

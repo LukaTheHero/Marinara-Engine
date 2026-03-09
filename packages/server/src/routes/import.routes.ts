@@ -8,6 +8,7 @@ import { importSTChat } from "../services/import/st-chat.importer.js";
 import { importSTCharacter } from "../services/import/st-character.importer.js";
 import { importSTPreset } from "../services/import/st-prompt.importer.js";
 import { importSTLorebook } from "../services/import/st-lorebook.importer.js";
+import { importMarinara } from "../services/import/marinara.importer.js";
 import { scanSTFolder, runSTBulkImport, type STBulkImportOptions } from "../services/import/st-bulk.importer.js";
 
 /**
@@ -21,14 +22,19 @@ function pickFolder(): Promise<string | null> {
     const os = platform();
 
     if (os === "darwin") {
-      execFile("osascript", ["-e", 'POSIX path of (choose folder with prompt "Select your SillyTavern folder")'], (err, stdout) => {
-        if (err) return resolve(null);
-        const p = stdout.trim().replace(/\/$/, "");
-        resolve(p || null);
-      });
+      execFile(
+        "osascript",
+        ["-e", 'POSIX path of (choose folder with prompt "Select your SillyTavern folder")'],
+        (err, stdout) => {
+          if (err) return resolve(null);
+          const p = stdout.trim().replace(/\/$/, "");
+          resolve(p || null);
+        },
+      );
     } else if (os === "win32") {
       const ps = [
-        "-NoProfile", "-Command",
+        "-NoProfile",
+        "-Command",
         "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Select your SillyTavern folder'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath } else { '' }",
       ];
       execFile("powershell.exe", ps, (err, stdout) => {
@@ -38,14 +44,22 @@ function pickFolder(): Promise<string | null> {
       });
     } else {
       // Linux — try zenity first, then kdialog
-      execFile("zenity", ["--file-selection", "--directory", "--title=Select your SillyTavern folder"], (err, stdout) => {
-        if (!err && stdout.trim()) return resolve(stdout.trim());
-        execFile("kdialog", ["--getexistingdirectory", ".", "--title", "Select your SillyTavern folder"], (err2, stdout2) => {
-          if (err2) return resolve(null);
-          const p = stdout2.trim();
-          resolve(p || null);
-        });
-      });
+      execFile(
+        "zenity",
+        ["--file-selection", "--directory", "--title=Select your SillyTavern folder"],
+        (err, stdout) => {
+          if (!err && stdout.trim()) return resolve(stdout.trim());
+          execFile(
+            "kdialog",
+            ["--getexistingdirectory", ".", "--title", "Select your SillyTavern folder"],
+            (err2, stdout2) => {
+              if (err2) return resolve(null);
+              const p = stdout2.trim();
+              resolve(p || null);
+            },
+          );
+        },
+      );
     }
   });
 }
@@ -56,7 +70,21 @@ export async function importRoutes(app: FastifyInstance) {
     const data = await req.file();
     if (!data) return { error: "No file uploaded" };
     const content = await data.toBuffer();
-    return importSTChat(content.toString("utf-8"), app.db);
+
+    // Use the uploaded filename (minus extension) as chat name if available
+    const rawName = data.filename ?? "";
+    const chatName =
+      rawName
+        .replace(/\.jsonl$/i, "")
+        .replace(/_/g, " ")
+        .trim() || undefined;
+
+    return importSTChat(content.toString("utf-8"), app.db, chatName ? { chatName } : undefined);
+  });
+
+  /** Import a Marinara Engine export (.marinara.json). */
+  app.post("/marinara", async (req) => {
+    return importMarinara(req.body as any, app.db);
   });
 
   /** Import a SillyTavern character (JSON body). */
@@ -71,7 +99,9 @@ export async function importRoutes(app: FastifyInstance) {
 
   /** Import a SillyTavern World Info / lorebook (JSON body). */
   app.post("/st-lorebook", async (req) => {
-    return importSTLorebook(req.body as Record<string, unknown>, app.db);
+    const body = req.body as Record<string, unknown>;
+    const fallbackName = typeof body.__filename === "string" ? body.__filename : undefined;
+    return importSTLorebook(body, app.db, fallbackName ? { fallbackName } : undefined);
   });
 
   // ═══════════════════════════════════════════════

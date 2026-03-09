@@ -8,6 +8,7 @@ import fastifyStatic from "@fastify/static";
 import { getDB } from "./db/connection.js";
 import { registerRoutes } from "./routes/index.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { runMigrations } from "./db/migrate.js";
 import { seedDefaultPreset } from "./db/seed.js";
 import { existsSync } from "fs";
 import { join, resolve } from "path";
@@ -15,11 +16,9 @@ import { join, resolve } from "path";
 export async function buildApp() {
   const app = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL ?? "info",
+      level: process.env.LOG_LEVEL ?? "warn",
       transport:
-        process.env.NODE_ENV !== "production"
-          ? { target: "pino-pretty", options: { colorize: true } }
-          : undefined,
+        process.env.NODE_ENV !== "production" ? { target: "pino-pretty", options: { colorize: true } } : undefined,
     },
     bodyLimit: 50 * 1024 * 1024, // 50 MB — needed for PNG character cards with embedded avatar
   });
@@ -39,6 +38,9 @@ export async function buildApp() {
   // ── Database ──
   const db = getDB();
   app.decorate("db", db);
+
+  // ── Migrations (add missing columns to existing tables) ──
+  await runMigrations(db);
 
   // ── Seed defaults ──
   await seedDefaultPreset(db);

@@ -3,8 +3,10 @@
 // ──────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useUIStore } from "../../stores/ui.store";
+import { useChatStore } from "../../stores/chat.store";
+import { useCreateChat, useDeleteChat } from "../../hooks/use-chats";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, X, Sparkles, HelpCircle, ArrowRightLeft } from "lucide-react";
+import { ChevronRight, ArrowRightLeft } from "lucide-react";
 
 // ─── Step definitions ─────────────────────────
 
@@ -19,6 +21,8 @@ interface TourStep {
   actionLabel?: string;
   /** Key used internally to trigger special step actions */
   actionKey?: string;
+  /** Professor Mari sprite to display */
+  sprite?: { src: string; flip?: boolean };
 }
 
 const STEPS: TourStep[] = [
@@ -26,29 +30,34 @@ const STEPS: TourStep[] = [
     target: null,
     title: "Welcome to Marinara Engine!",
     body: "Hi! Here's a quick tutorial to show you around. Confident in your skill? Feel free to skip it!",
+    sprite: { src: "/sprites/mari/Mari_wave.png" },
   },
   {
     target: "sidebar",
     title: "Chat Sidebar",
     body: "This is where all your conversations live. Create new chats, search through them, and organize your history. You can have as many chats as you want!",
     side: "right",
+    sprite: { src: "/sprites/mari/Mari_point_middle_left.png" },
   },
   {
     target: "panel-buttons",
     title: "Tab Buttons",
     body: "These buttons open panels on the right for Characters, Lorebooks, Presets, Connections, Agents, and Settings. Everything you need is one click away!",
     side: "bottom",
+    sprite: { src: "/sprites/mari/Mari_point_up_left.png", flip: true },
   },
   {
     target: "chat-area",
     title: "Chat Area",
     body: "This is your main workspace — where you chat with AI characters, enjoy roleplay, and read generated stories. Messages appear here in real time.",
     side: "left",
+    sprite: { src: "/sprites/mari/Mari_point_middle_left.png" },
   },
   {
     target: null,
     title: "Set Up a Connection",
     body: "Before you start chatting, you'll need to connect an AI provider. Click the chain-link icon (🔗) in the top-right tab buttons, then add your API key for OpenAI, Anthropic, or another provider.",
+    sprite: { src: "/sprites/mari/Mari_explaining.png" },
   },
   {
     target: null,
@@ -56,11 +65,13 @@ const STEPS: TourStep[] = [
     body: "If you have characters, chats, or presets from SillyTavern, you can import them all in one go from the Settings panel.",
     actionLabel: "Take Me There",
     actionKey: "migrate",
+    sprite: { src: "/sprites/mari/Mari_thinking.png" },
   },
   {
     target: null,
     title: "You're All Set!",
     body: "Look for the (?) icons throughout the app — hover over them anytime to learn what each option does. Have fun exploring!",
+    sprite: { src: "/sprites/mari/Mari_greet.png" },
   },
 ];
 
@@ -105,10 +116,7 @@ function buildClipPath(rect: Rect): string {
 
 // ─── Tooltip position ─────────────────────────
 
-function computeTooltipStyle(
-  rect: Rect,
-  side: "top" | "bottom" | "left" | "right" = "right",
-): React.CSSProperties {
+function computeTooltipStyle(rect: Rect, side: "top" | "bottom" | "left" | "right" = "right"): React.CSSProperties {
   const TOOLTIP_W = 320;
   const GAP = 16;
   const vw = window.innerWidth;
@@ -170,30 +178,26 @@ function TourCardContent({
 }) {
   return (
     <>
+      {/* Professor Mari sprite */}
+      {currentStep.sprite && (
+        <div className="mb-2 flex justify-center">
+          <img
+            src={currentStep.sprite.src}
+            alt="Professor Mari"
+            className="h-32 w-auto object-contain drop-shadow-lg"
+            style={currentStep.sprite.flip ? { transform: "scaleX(-1)" } : undefined}
+            draggable={false}
+          />
+        </div>
+      )}
+
       {/* Header */}
-      <div className="mb-3 flex items-center gap-2">
-        {step === 0 ? (
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-md shadow-pink-500/20">
-            <Sparkles size={16} />
-          </div>
-        ) : isLast ? (
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md shadow-emerald-500/20">
-            <HelpCircle size={16} />
-          </div>
-        ) : (
-          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--primary)]/20 text-xs font-bold text-[var(--primary)]">
-            {step}
-          </div>
-        )}
-        <h3 className="text-sm font-semibold text-[var(--foreground)]">
-          {currentStep.title}
-        </h3>
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-[var(--foreground)]">{currentStep.title}</h3>
       </div>
 
       {/* Body */}
-      <p className="mb-4 text-xs leading-relaxed text-[var(--muted-foreground)]">
-        {currentStep.body}
-      </p>
+      <p className="mb-4 text-xs leading-relaxed text-[var(--muted-foreground)]">{currentStep.body}</p>
 
       {/* Progress dots */}
       <div className="mb-3 flex items-center justify-center gap-1.5">
@@ -246,25 +250,114 @@ function TourCardContent({
 
 export function OnboardingTutorial() {
   const hasCompleted = useUIStore((s) => s.hasCompletedOnboarding);
+  if (hasCompleted) return null;
+  return <OnboardingTutorialInner />;
+}
+
+function OnboardingTutorialInner() {
   const setCompleted = useUIStore((s) => s.setHasCompletedOnboarding);
   const openRightPanel = useUIStore((s) => s.openRightPanel);
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+
+  const createChat = useCreateChat();
+  const deleteChat = useDeleteChat();
 
   const [step, setStep] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
   const rafRef = useRef<number>(0);
+  const demoChatIdRef = useRef<string | null>(null);
+  const prevStepRef = useRef(0);
+  const createChatRef = useRef(createChat);
+  const deleteChatRef = useRef(deleteChat);
+  createChatRef.current = createChat;
+  deleteChatRef.current = deleteChat;
 
   const currentStep = STEPS[step];
   const isLast = step === STEPS.length - 1;
 
+  // Set activeChatId without persisting to localStorage (demo-only)
+  const setDemoChatActive = useCallback((id: string | null) => {
+    useChatStore.setState({
+      activeChatId: id,
+      swipeIndex: new Map(),
+      ...(!id && { activeChat: null }),
+    });
+  }, []);
+
+  // ── Side-effects when step changes ──
+  useEffect(() => {
+    const prev = prevStepRef.current;
+    prevStepRef.current = step;
+
+    // Step 1 (sidebar): open sidebar on enter
+    if (step === 1) {
+      setSidebarOpen(true);
+    }
+    // Leaving step 1: close sidebar
+    if (prev === 1 && step !== 1) {
+      setSidebarOpen(false);
+    }
+
+    // Step 3 (chat area): create demo chat on enter
+    if (step === 3 && !demoChatIdRef.current) {
+      demoChatIdRef.current = "pending"; // prevent duplicate creation (StrictMode / re-renders)
+      createChatRef.current
+        .mutateAsync({ name: "Welcome to Marinara!", mode: "roleplay" })
+        .then((chat) => {
+          demoChatIdRef.current = chat.id;
+          setDemoChatActive(chat.id);
+        })
+        .catch(() => {
+          demoChatIdRef.current = null;
+        });
+    }
+    // Leaving step 3: delete demo chat
+    if (prev === 3 && step !== 3) {
+      if (demoChatIdRef.current && demoChatIdRef.current !== "pending") {
+        const id = demoChatIdRef.current;
+        setDemoChatActive(null);
+        deleteChatRef.current.mutate(id);
+      }
+      demoChatIdRef.current = null;
+    }
+  }, [step, setSidebarOpen, setDemoChatActive]);
+
+  // Cleanup demo chat on unmount (skip/finish while on step 3)
+  useEffect(() => {
+    return () => {
+      if (demoChatIdRef.current && demoChatIdRef.current !== "pending") {
+        const id = demoChatIdRef.current;
+        demoChatIdRef.current = null;
+        useChatStore.setState({ activeChatId: null, activeChat: null, swipeIndex: new Map() });
+        deleteChatRef.current.mutate(id);
+      }
+    };
+  }, []);
+
   // Track the target element position (handles resize/scroll)
+  const lastRectRef = useRef<Rect | null>(null);
   const updateRect = useCallback(() => {
     if (!currentStep?.target) {
-      setTargetRect(null);
+      if (lastRectRef.current !== null) {
+        lastRectRef.current = null;
+        setTargetRect(null);
+      }
       return;
     }
     const r = getTargetRect(currentStep.target);
-    setTargetRect(r);
+    // Only update state if the rect actually changed
+    const prev = lastRectRef.current;
+    if (!r && prev) {
+      lastRectRef.current = null;
+      setTargetRect(null);
+    } else if (
+      r &&
+      (!prev || r.top !== prev.top || r.left !== prev.left || r.width !== prev.width || r.height !== prev.height)
+    ) {
+      lastRectRef.current = r;
+      setTargetRect(r);
+    }
     rafRef.current = requestAnimationFrame(updateRect);
   }, [currentStep?.target]);
 
@@ -275,13 +368,17 @@ export function OnboardingTutorial() {
 
   const finish = useCallback(() => setCompleted(true), [setCompleted]);
 
-  const handleAction = useCallback((key: string) => {
-    if (key === "migrate") {
-      openRightPanel("settings");
-      setSettingsTab("import");
-      finish();
-    }
-  }, [openRightPanel, setSettingsTab, finish]);
+  const handleAction = useCallback(
+    (key: string) => {
+      if (key === "migrate") {
+        openRightPanel("settings");
+        setSettingsTab("import");
+        // Jump to last step instead of finishing
+        setStep(STEPS.length - 1);
+      }
+    },
+    [openRightPanel, setSettingsTab],
+  );
 
   const next = useCallback(() => {
     if (isLast) {
@@ -291,12 +388,13 @@ export function OnboardingTutorial() {
     }
   }, [isLast, finish]);
 
-  if (hasCompleted) return null;
-
   const isCentered = !currentStep.target || !targetRect;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999]">
+      {/* Dark backdrop */}
+      <div className="pointer-events-auto fixed inset-0 bg-black/60" />
+
       {/* Centered steps use a flex wrapper so Framer Motion transforms don't override CSS centering */}
       {isCentered ? (
         <div className="pointer-events-none fixed inset-0 flex items-center justify-center">
@@ -310,7 +408,14 @@ export function OnboardingTutorial() {
               className="pointer-events-auto rounded-2xl border border-[var(--border)] bg-[var(--popover)] p-5 shadow-2xl ring-1 ring-[var(--primary)]/20"
               style={{ width: 380 }}
             >
-              <TourCardContent step={step} currentStep={currentStep} isLast={isLast} onNext={next} onSkip={finish} onAction={handleAction} />
+              <TourCardContent
+                step={step}
+                currentStep={currentStep}
+                isLast={isLast}
+                onNext={next}
+                onSkip={finish}
+                onAction={handleAction}
+              />
             </motion.div>
           </AnimatePresence>
         </div>
@@ -325,7 +430,14 @@ export function OnboardingTutorial() {
             className="pointer-events-auto rounded-2xl border border-[var(--border)] bg-[var(--popover)] p-5 shadow-2xl ring-1 ring-[var(--primary)]/20"
             style={computeTooltipStyle(targetRect!, currentStep.side)}
           >
-            <TourCardContent step={step} currentStep={currentStep} isLast={isLast} onNext={next} onSkip={finish} onAction={handleAction} />
+            <TourCardContent
+              step={step}
+              currentStep={currentStep}
+              isLast={isLast}
+              onNext={next}
+              onSkip={finish}
+              onAction={handleAction}
+            />
           </motion.div>
         </AnimatePresence>
       )}

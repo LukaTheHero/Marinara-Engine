@@ -12,6 +12,7 @@ import {
   createChoiceBlockSchema,
   updateChoiceBlockSchema,
 } from "@rpg-engine/shared";
+import type { ExportEnvelope } from "@rpg-engine/shared";
 import { createPromptsStorage } from "../services/storage/prompts.storage.js";
 import { assemblePrompt, type AssemblerInput } from "../services/prompt/index.js";
 import { createChatsStorage } from "../services/storage/chats.storage.js";
@@ -71,6 +72,30 @@ export async function promptsRoutes(app: FastifyInstance) {
     return result;
   });
 
+  // ── Export ──
+
+  app.get<{ Params: { id: string } }>("/:id/export", async (req, reply) => {
+    const preset = await storage.getById(req.params.id);
+    if (!preset) return reply.status(404).send({ error: "Preset not found" });
+    const [sections, groups, choiceBlocks] = await Promise.all([
+      storage.listSections(req.params.id),
+      storage.listGroups(req.params.id),
+      storage.listChoiceBlocksForPreset(req.params.id),
+    ]);
+    const envelope: ExportEnvelope = {
+      type: "marinara_preset",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: { preset, sections, groups, choiceBlocks },
+    };
+    return reply
+      .header(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(preset.name || "preset")}.marinara.json"`,
+      )
+      .send(envelope);
+  });
+
   // ═══════════════════════════════════════════
   //  Groups
   // ═══════════════════════════════════════════
@@ -87,21 +112,15 @@ export async function promptsRoutes(app: FastifyInstance) {
     return storage.createGroup(input);
   });
 
-  app.patch<{ Params: { presetId: string; groupId: string } }>(
-    "/:presetId/groups/:groupId",
-    async (req) => {
-      const input = updatePromptGroupSchema.parse(req.body);
-      return storage.updateGroup(req.params.groupId, input);
-    },
-  );
+  app.patch<{ Params: { presetId: string; groupId: string } }>("/:presetId/groups/:groupId", async (req) => {
+    const input = updatePromptGroupSchema.parse(req.body);
+    return storage.updateGroup(req.params.groupId, input);
+  });
 
-  app.delete<{ Params: { presetId: string; groupId: string } }>(
-    "/:presetId/groups/:groupId",
-    async (req, reply) => {
-      await storage.removeGroup(req.params.groupId);
-      return reply.status(204).send();
-    },
-  );
+  app.delete<{ Params: { presetId: string; groupId: string } }>("/:presetId/groups/:groupId", async (req, reply) => {
+    await storage.removeGroup(req.params.groupId);
+    return reply.status(204).send();
+  });
 
   app.put<{ Params: { id: string } }>("/:id/groups/reorder", async (req) => {
     const { groupIds } = req.body as { groupIds: string[] };
@@ -125,13 +144,10 @@ export async function promptsRoutes(app: FastifyInstance) {
     return storage.createSection(input);
   });
 
-  app.patch<{ Params: { presetId: string; sectionId: string } }>(
-    "/:presetId/sections/:sectionId",
-    async (req) => {
-      const input = updatePromptSectionSchema.parse(req.body);
-      return storage.updateSection(req.params.sectionId, input);
-    },
-  );
+  app.patch<{ Params: { presetId: string; sectionId: string } }>("/:presetId/sections/:sectionId", async (req) => {
+    const input = updatePromptSectionSchema.parse(req.body);
+    return storage.updateSection(req.params.sectionId, input);
+  });
 
   app.delete<{ Params: { presetId: string; sectionId: string } }>(
     "/:presetId/sections/:sectionId",
@@ -148,42 +164,39 @@ export async function promptsRoutes(app: FastifyInstance) {
   });
 
   // ═══════════════════════════════════════════
-  //  Choice Blocks
+  //  Preset Variables (Choice Blocks)
   // ═══════════════════════════════════════════
 
-  app.get<{ Params: { presetId: string; sectionId: string } }>(
-    "/:presetId/sections/:sectionId/choice",
-    async (req) => {
-      return storage.getChoiceBlock(req.params.sectionId);
-    },
-  );
+  app.get<{ Params: { presetId: string } }>("/:presetId/variables", async (req) => {
+    return storage.listChoiceBlocksForPreset(req.params.presetId);
+  });
 
-  app.post<{ Params: { presetId: string; sectionId: string } }>(
-    "/:presetId/sections/:sectionId/choice",
-    async (req) => {
-      const input = createChoiceBlockSchema.parse({
-        ...(req.body as Record<string, unknown>),
-        sectionId: req.params.sectionId,
-      });
-      return storage.createChoiceBlock(input);
-    },
-  );
+  app.post<{ Params: { presetId: string } }>("/:presetId/variables", async (req) => {
+    const input = createChoiceBlockSchema.parse({
+      ...(req.body as Record<string, unknown>),
+      presetId: req.params.presetId,
+    });
+    return storage.createChoiceBlock(input);
+  });
 
-  app.patch<{ Params: { presetId: string; sectionId: string; choiceId: string } }>(
-    "/:presetId/sections/:sectionId/choice/:choiceId",
-    async (req) => {
-      const input = updateChoiceBlockSchema.parse(req.body);
-      return storage.updateChoiceBlock(req.params.choiceId, input);
-    },
-  );
+  app.patch<{ Params: { presetId: string; variableId: string } }>("/:presetId/variables/:variableId", async (req) => {
+    const input = updateChoiceBlockSchema.parse(req.body);
+    return storage.updateChoiceBlock(req.params.variableId, input);
+  });
 
-  app.delete<{ Params: { presetId: string; sectionId: string; choiceId: string } }>(
-    "/:presetId/sections/:sectionId/choice/:choiceId",
+  app.delete<{ Params: { presetId: string; variableId: string } }>(
+    "/:presetId/variables/:variableId",
     async (req, reply) => {
-      await storage.removeChoiceBlock(req.params.choiceId);
+      await storage.removeChoiceBlock(req.params.variableId);
       return reply.status(204).send();
     },
   );
+
+  app.put<{ Params: { presetId: string } }>("/:presetId/variables/reorder", async (req) => {
+    const { variableIds } = req.body as { variableIds: string[] };
+    await storage.reorderVariables(req.params.presetId, variableIds);
+    return { success: true };
+  });
 
   // ═══════════════════════════════════════════
   //  Prompt Preview (Assembled)

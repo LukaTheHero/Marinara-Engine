@@ -48,10 +48,7 @@ export function EditAgentModal({ open, onClose, agent }: Props) {
   // Sync form state when agent changes
   useEffect(() => {
     if (agent) {
-      const settings =
-        typeof agent.settings === "string"
-          ? JSON.parse(agent.settings || "{}")
-          : agent.settings ?? {};
+      const settings = typeof agent.settings === "string" ? JSON.parse(agent.settings || "{}") : (agent.settings ?? {});
       void settings; // available for future use
 
       setForm({
@@ -66,8 +63,7 @@ export function EditAgentModal({ open, onClose, agent }: Props) {
 
   // Update existing config
   const updateAgent = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      api.patch(`/agents/${id}`, data),
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => api.patch(`/agents/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agents"] });
       onClose();
@@ -166,30 +162,24 @@ export function EditAgentModal({ open, onClose, agent }: Props) {
 
         {/* Connection Override */}
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--muted-foreground)]">
-            Connection Override
-          </span>
+          <span className="text-xs font-medium text-[var(--muted-foreground)]">Connection Override</span>
           <select
             value={form.connectionId}
             onChange={(e) => setForm((f) => ({ ...f, connectionId: e.target.value }))}
             className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2 text-sm outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
           >
             <option value="">Use default connection</option>
-            {(connections as Array<{ id: string; name: string; provider: string }> | undefined)?.map(
-              (conn) => (
-                <option key={conn.id} value={conn.id}>
-                  {conn.name} ({conn.provider})
-                </option>
-              ),
-            )}
+            {(connections as Array<{ id: string; name: string; provider: string }> | undefined)?.map((conn) => (
+              <option key={conn.id} value={conn.id}>
+                {conn.name} ({conn.provider})
+              </option>
+            ))}
           </select>
         </label>
 
         {/* Prompt Template */}
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--muted-foreground)]">
-            Prompt Template
-          </span>
+          <span className="text-xs font-medium text-[var(--muted-foreground)]">Prompt Template</span>
           <textarea
             value={form.promptTemplate}
             onChange={(e) => setForm((f) => ({ ...f, promptTemplate: e.target.value }))}

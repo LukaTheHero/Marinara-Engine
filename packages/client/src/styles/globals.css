@@ -6,33 +6,51 @@
 
    TABLE OF CONTENTS
    ─────────────────
-   1.  CSS Variables — Dark Theme (default)
-   2.  CSS Variables — Light Theme Override
-   3.  Light Theme — Component Overrides
-   4.  Base Reset & Body
-   5.  Custom Cursors
-   6.  Scrollbars
-   7.  Glass / Frosted Panels
-   8.  Glow & Shadow Effects
-   9.  Keyframe Animations
-   10. UI Components (Badges, Cards, Dividers, Buttons, Windows)
-   11. Chat Animations & Utilities
-   12. Chat: Glimmer Theme (Roleplay Bubbles)
-   13. Chat: Conversation Mode (iMessage / Texting)
-   14. Chat: Roleplay Mode (Immersive Dark RPG)
-   15. Sprites & Game HUD
-   16. Function Call Cards
-   17. Responsive / Mobile
-   18. SillyTavern Visual Theme Override
+    1.  Dark Theme Variables .............. colors, palette, fonts
+    2.  Light Theme Variables ............. light-mode overrides for §1
+    3.  Light Theme Component Overrides ... glass, grid, scrollbar tweaks
+    4.  Base Reset & Body ................. border reset, body defaults
+    5.  Custom Cursors .................... Y2K SVG cursors
+    6.  Scrollbars ........................ retro scrollbar styling
+    7.  Glass / Frosted Panels ............ .glass, .glass-strong
+    8.  Glow & Shadow Effects ............. .glow-primary, .glow-sm
+    9.  Keyframe Animations ............... all @keyframes + OS window
+   10.  UI Components ..................... badges, cards, stars, buttons
+   11.  Chat Animations & Utilities ....... message-in, shimmer, grid, etc.
+   12.  Chat: Glimmer Theme ............... roleplay bubbles (Rivelle-inspired)
+   13.  Chat: Conversation Mode ........... iMessage / texting bubbles
+   14.  Chat: Roleplay Mode ............... immersive dark RPG
+   15.  Sprites & Game HUD ................ character sprites, stat bars
+   16.  Function Call Cards ............... tool-use result display
+   17.  Responsive / Mobile ............... breakpoints + touch targets
+   18.  SillyTavern Visual Theme .......... faithful ST dark/light override
+   19.  Accessibility — Reduced Motion .... prefers-reduced-motion
+   20.  Performance — GPU Hints ........... will-change compositing
+
+   QUICK CUSTOMIZATION GUIDE
+   ─────────────────────────
+   • Change the app's accent color → edit --y2k-pink / --primary in §1
+   • Change the background color   → edit --background in §1
+   • Change the font               → edit --font-y2k in §1
+   • Change the cursor SVG           → edit --cursor-pink in §1
+   • Disable the custom cursor      → delete or comment out §4 + §5
+   • Disable glow / scanlines       → delete or comment out §8 + §9
+   • Tweak chat bubble look         → §12 (glimmer), §13 (texting), §14 (RPG)
+   • Add/change breakpoints         → §17
 
    ═══════════════════════════════════════════════ */
 
 
 /* ─────────────────────────────────────────────
-   1. CSS VARIABLES — DARK THEME (DEFAULT)
+   1. DARK THEME VARIABLES
+   Default color tokens, palette, and font.
    ───────────────────────────────────────────── */
 :root, [data-theme="dark"] {
-  /* Core tokens */
+  color-scheme: dark;
+
+  /* ── Core tokens ──
+     These map to Tailwind's color utilities (bg-background, text-foreground, etc.)
+     Change --primary and --background to reskin the whole app. */
   --background: #050312;
   --foreground: #f0e8ff;
   --card: #141414d9;
@@ -61,7 +79,13 @@
   --glow-primary: rgba(255, 179, 217, 0.15);
   --glow-accent: rgba(212, 173, 252, 0.12);
 
-  /* Y2K palette */
+  /* ── Custom cursor ──
+     Single pink arrow SVG. Edit or remove to change the cursor. */
+  --cursor-pink: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 3L10 20L12 12L20 10L3 3Z' fill='%23FFB3D9' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E");
+
+  /* ── Y2K palette ──
+     Decorative accent colors used throughout the UI.
+     Edit these to change the app's personality. */
   --y2k-pink: #ffb3d9;
   --y2k-purple: #d4adfc;
   --y2k-blue: #a8d8ff;
@@ -70,7 +94,8 @@
   --y2k-lavender: #e8d4ff;
   --y2k-yellow: #fff5a8;
 
-  /* Pastel shades */
+  /* ── Pastel shades ──
+     Softer tints used in gradients, badges, and hover states. */
   --pastel-rose: #ffd1e3;
   --pastel-lilac: #e0b8ff;
   --pastel-sky: #c5e7ff;
@@ -80,7 +105,8 @@
   --pastel-lavender: #e8d5ff;
   --pastel-periwinkle: #c8bfff;
 
-  /* RGB rainbow */
+  /* ── RGB rainbow ──
+     Vivid colors for animated rainbow borders and pulse effects. */
   --rgb-red: #ff6b9d;
   --rgb-orange: #ffb088;
   --rgb-yellow: #ffe799;
@@ -90,19 +116,22 @@
   --rgb-indigo: #d493d4;
   --rgb-violet: #ff99c8;
 
-  /* Font */
-  --font-y2k: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* ── Font ──
+     The app's primary typeface. Change this to swap fonts globally. */
+  --font-y2k: "Straight Quotes", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
-  /* Font size (overridden by JS) */
+  /* ── Font size ──
+     Base size; overridden at runtime by the Settings panel. */
   --app-font-size: 14px;
 }
 
 /* ─────────────────────────────────────────────
-   2. CSS VARIABLES — LIGHT THEME OVERRIDE
+   2. LIGHT THEME VARIABLES
+   Overrides §1 tokens when data-theme="light".
    ───────────────────────────────────────────── */
-
-/* ─── Light Theme Override ─── */
 [data-theme="light"] {
+  color-scheme: light;
+
   --background: #faf8ff;
   --foreground: #1a1025;
   --card: #ffffffee;
@@ -141,9 +170,9 @@
 
 /* ─────────────────────────────────────────────
    3. LIGHT THEME — COMPONENT OVERRIDES
+   Higher-specificity overrides for glass, grid,
+   glow text, scrollbars, and shimmer in light mode.
    ───────────────────────────────────────────── */
-
-/* Light overrides for glass panels */
 [data-theme="light"] .glass {
   background: linear-gradient(135deg, rgba(255,255,255,0.6) 0%, rgba(245,240,252,0.6) 100%);
   border: 1px solid rgba(0,0,0,0.06);
@@ -204,12 +233,23 @@
 
 /* ─────────────────────────────────────────────
    4. BASE RESET & BODY
+   Global border-color reset and body defaults.
    ───────────────────────────────────────────── */
-
-/* ─── Base Reset ─── */
 * {
   @apply border-[var(--border)];
-  cursor: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 3L10 20L12 12L20 10L3 3Z' fill='%23FFB3D9' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E"), auto;
+  cursor: var(--cursor-pink), auto;
+}
+
+input, select, textarea {
+  cursor: var(--cursor-pink), auto;
+}
+
+/* Override font for quotation marks — forces visually straight glyphs
+   regardless of the display font's curly-looking quote design. */
+@font-face {
+  font-family: "Straight Quotes";
+  src: local("Arial"), local("Helvetica Neue"), local("Helvetica"), local("Segoe UI"), local("Roboto"), local("sans-serif");
+  unicode-range: U+0022, U+0027;
 }
 
 body {
@@ -223,18 +263,43 @@ body {
 
 /* ─────────────────────────────────────────────
    5. CUSTOM CURSORS
+   Single pink arrow cursor everywhere on Marinara theme.
+   Delete this section to use default cursors.
+   To change the cursor, edit --cursor-pink in §1.
    ───────────────────────────────────────────── */
+a, button, input[type="color"] {
+  cursor: var(--cursor-pink), auto;
+}
 
-/* ─── Y2K Custom Cursor (interactive elements) ─── */
-a, button, input, select, textarea {
-  cursor: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 3L8 10L12 10L12 3L8 3Z' fill='%23A8D8FF' stroke='%23000' stroke-width='1'/%3E%3Cpath d='M3 8L10 8L10 12L3 12L3 8Z' fill='%23A8D8FF' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E"), pointer;
+/* Override all Tailwind cursor utilities to keep the pink cursor */
+.cursor-pointer, .cursor-grab, .cursor-help,
+.cursor-default, .cursor-text, .cursor-move,
+.cursor-crosshair, .cursor-wait, .cursor-progress,
+label[class*="cursor-pointer"],
+summary[class*="cursor-pointer"],
+[class*="cursor-pointer"] {
+  cursor: var(--cursor-pink), auto !important;
+}
+.cursor-not-allowed,
+.disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed !important;
+}
+.active\:cursor-grabbing:active {
+  cursor: var(--cursor-pink), auto !important;
 }
 
 /* ─────────────────────────────────────────────
    6. SCROLLBARS
+   Gradient-thumb scrollbar styling.
    ───────────────────────────────────────────── */
 
-/* ─── Scrollbar styling (Retro Y2K) ─── */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--y2k-pink) transparent;
+}
+
+/* Webkit (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
   width: 10px;
 }
@@ -255,9 +320,8 @@ a, button, input, select, textarea {
 
 /* ─────────────────────────────────────────────
    7. GLASS / FROSTED PANELS
+   Backdrop-blur panels used throughout the UI.
    ───────────────────────────────────────────── */
-
-/* ─── Glass / Frosted panels (Y2K tint) ─── */
 .glass {
   backdrop-filter: blur(20px) saturate(180%);
   background: linear-gradient(135deg, rgba(255,179,217,0.06) 0%, rgba(212,173,252,0.06) 50%, rgba(168,216,255,0.06) 100%);
@@ -273,9 +337,8 @@ a, button, input, select, textarea {
 
 /* ─────────────────────────────────────────────
    8. GLOW & SHADOW EFFECTS
+   Utility glow classes for cards and avatars.
    ───────────────────────────────────────────── */
-
-/* ─── Glow effects (Pink / Purple) ─── */
 .glow-primary {
   box-shadow:
     0 0 8px rgba(255,179,217,0.3),
@@ -289,9 +352,9 @@ a, button, input, select, textarea {
 
 /* ─────────────────────────────────────────────
    9. KEYFRAME ANIMATIONS
+   All @keyframes and the classes that use them.
+   Includes OS-window chrome styles at the end.
    ───────────────────────────────────────────── */
-
-/* ─── Bunny Glow animation ─── */
 @keyframes bunny-glow {
   0%, 100% { box-shadow: 0 0 8px rgba(236,72,153,0.3), 0 0 16px rgba(168,85,247,0.2); }
   50% { box-shadow: 0 0 12px rgba(236,72,153,0.4), 0 0 24px rgba(168,85,247,0.3); }
@@ -354,17 +417,38 @@ a, button, input, select, textarea {
   opacity: 1;
 }
 
-/* ─── Retro Scanlines overlay ─── */
+/* ─── Retro Scanlines overlay (disabled globally — clean look) ─── */
 .retro-scanlines::after {
+  display: none;
+}
+
+/* ─── Button-only scanlines (opt-in via .btn-scanlines class) ─── */
+.btn-scanlines {
+  position: relative;
+  isolation: isolate;
+}
+.btn-scanlines::after {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
-  pointer-events: none;
-  z-index: 50;
+  border-radius: inherit;
   background: repeating-linear-gradient(
     0deg,
-    rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px,
-    transparent 1px, transparent 2px
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.06) 2px,
+    rgba(0, 0, 0, 0.06) 4px
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+[data-theme="light"] .btn-scanlines::after {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
   );
 }
 
@@ -474,9 +558,8 @@ a, button, input, select, textarea {
 
 /* ─────────────────────────────────────────────
    10. UI COMPONENTS
+   Retro badges, cards, twinkling stars, buttons.
    ───────────────────────────────────────────── */
-
-/* ─── Retro Badge ─── */
 .retro-badge {
   display: inline-block;
   padding: 3px 10px;
@@ -515,37 +598,37 @@ a, button, input, select, textarea {
   50%      { opacity: 0.2; filter: blur(0.5px); transform: scale(0.9); }
 }
 
-.y2k-star {
-  position: fixed;
-  pointer-events: none;
-  width: 2px;
-  height: 2px;
-  background: var(--y2k-pink);
-  border-radius: 50%;
-  box-shadow: 0 0 8px 3px rgba(255,179,217,0.5), 0 0 16px 6px rgba(255,179,217,0.2);
-  animation: twinkle-glow 4s ease-in-out infinite;
-}
-
-.y2k-star-md {
-  position: fixed;
-  pointer-events: none;
-  width: 3px;
-  height: 3px;
-  background: var(--y2k-purple);
-  border-radius: 50%;
-  box-shadow: 0 0 10px 4px rgba(212,173,252,0.6), 0 0 20px 8px rgba(212,173,252,0.3);
-  animation: twinkle-glow 5s ease-in-out infinite;
-}
-
+/* Shared star base */
+.y2k-star,
+.y2k-star-md,
 .y2k-star-lg {
   position: fixed;
   pointer-events: none;
+  border-radius: 50%;
+  animation: twinkle-glow 4s ease-in-out infinite;
+}
+
+.y2k-star {
+  width: 2px;
+  height: 2px;
+  background: var(--y2k-pink);
+  box-shadow: 0 0 8px 3px rgba(255,179,217,0.5), 0 0 16px 6px rgba(255,179,217,0.2);
+}
+
+.y2k-star-md {
+  width: 3px;
+  height: 3px;
+  background: var(--y2k-purple);
+  box-shadow: 0 0 10px 4px rgba(212,173,252,0.6), 0 0 20px 8px rgba(212,173,252,0.3);
+  animation-duration: 5s;
+}
+
+.y2k-star-lg {
   width: 4px;
   height: 4px;
   background: #ffe4f5;
-  border-radius: 50%;
   box-shadow: 0 0 12px 5px rgba(255,228,245,0.7), 0 0 24px 10px rgba(255,228,245,0.4);
-  animation: twinkle-glow 6s ease-in-out infinite;
+  animation-duration: 6s;
 }
 
 /* ─── Pulse glow ─── */
@@ -560,24 +643,23 @@ a, button, input, select, textarea {
 
 /* ─────────────────────────────────────────────
    11. CHAT ANIMATIONS & UTILITIES
+   Entrance animations, shimmer loader, noise
+   texture, chat background, grid, glow text.
    ───────────────────────────────────────────── */
-
-/* ─── Chat message animations ─── */
 @keyframes message-in {
   from {
     opacity: 0;
     transform: translateY(12px) scale(0.98);
-    filter: blur(2px);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-    filter: blur(0);
   }
 }
 
 .animate-message-in {
   animation: message-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
 }
 
 /* ─── Slide-in from left ─── */
@@ -747,10 +829,11 @@ a, button, input, select, textarea {
   transform: perspective(1000px) rotateX(2deg) rotateY(5deg) translateZ(10px);
 }
 
-/* ═══════════════════════════════════════════════
-   Glimmer Theme – Roleplay Chat Styling
-   Inspired by Rivelle's Glimmer for SillyTavern
-   ═══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   12. CHAT: GLIMMER THEME
+   Dreamy roleplay bubble styling inspired
+   by Rivelle’s Glimmer for SillyTavern.
+   ───────────────────────────────────────────── */
 
 /* Avatar ring with dreamy glow */
 .glimmer-avatar-ring {
@@ -867,7 +950,8 @@ a, button, input, select, textarea {
 }
 
 /* ─────────────────────────────────────────────
-   13. CHAT: CONVERSATION MODE (iMESSAGE / TEXTING)
+   13. CHAT: CONVERSATION MODE
+   iMessage-style texting bubbles.
    ───────────────────────────────────────────── */
 
 .texting-bubble {
@@ -895,10 +979,10 @@ a, button, input, select, textarea {
 }
 
 /* ─────────────────────────────────────────────
-   14. CHAT: ROLEPLAY MODE (IMMERSIVE DARK RPG)
+   14. CHAT: ROLEPLAY MODE
+   Immersive dark RPG chat styling with
+   atmospheric overlays, vignette, and avatar glow.
    ───────────────────────────────────────────── */
-
-/* Main RP chat container */
 .rpg-chat-area {
   background: #0a0a0f;
 }
@@ -907,10 +991,10 @@ a, button, input, select, textarea {
 .rpg-overlay {
   background: linear-gradient(
     180deg,
-    rgba(8, 8, 18, 0.85) 0%,
-    rgba(8, 8, 18, 0.70) 30%,
-    rgba(8, 8, 18, 0.75) 70%,
-    rgba(8, 8, 18, 0.90) 100%
+    rgba(8, 8, 18, 0.55) 0%,
+    rgba(8, 8, 18, 0.40) 30%,
+    rgba(8, 8, 18, 0.45) 70%,
+    rgba(8, 8, 18, 0.60) 100%
   );
 }
 
@@ -919,7 +1003,7 @@ a, button, input, select, textarea {
   background: radial-gradient(
     ellipse at center,
     transparent 50%,
-    rgba(0, 0, 0, 0.5) 100%
+    rgba(0, 0, 0, 0.3) 100%
   );
 }
 
@@ -974,161 +1058,11 @@ a, button, input, select, textarea {
 }
 
 /* ─────────────────────────────────────────────
-   17. RESPONSIVE / MOBILE
-   ───────────────────────────────────────────── */
-
-/* ─── Tablet & below (< 1024px) ─── */
-@media (max-width: 1023px) {
-  /* Shrink right panel to overlay width */
-  .right-panel-overlay {
-    width: 100% !important;
-    max-width: 360px;
-  }
-}
-
-/* ─── Mobile (< 768px) ─── */
-@media (max-width: 767px) {
-  /* App shell: stack vertically, sidebar + panel overlay */
-  .app-sidebar-mobile {
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 40;
-    width: 100% !important;
-    max-width: 300px;
-  }
-
-  .app-sidebar-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 39;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(2px);
-  }
-
-  /* Right panel: full-screen overlay on mobile */
-  .app-right-panel-mobile {
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 45;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  /* TopBar: compact layout */
-  .topbar-panel-buttons {
-    gap: 0 !important;
-    padding: 2px !important;
-  }
-
-  .topbar-panel-buttons button {
-    padding: 6px !important;
-  }
-
-  /* Retro badge: smaller on mobile */
-  .retro-badge {
-    padding: 2px 6px;
-    font-size: 9px;
-  }
-
-  /* Hide decorative stars on mobile */
-  .y2k-star,
-  .y2k-star-md,
-  .y2k-star-lg {
-    display: none;
-  }
-
-  /* Scanlines: disable on mobile for performance */
-  .retro-scanlines::after {
-    display: none;
-  }
-
-  /* Noise: disable on mobile for performance */
-  .noise-bg::before {
-    display: none;
-  }
-
-  /* Chat messages: wider on mobile */
-  .chat-msg-max-width {
-    max-width: 90% !important;
-  }
-
-  /* Character editor: collapse tab rail to horizontal */
-  .char-editor-body {
-    flex-direction: column !important;
-  }
-
-  .char-editor-tab-rail {
-    width: 100% !important;
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    border-right: none !important;
-    border-bottom: 1px solid var(--border) !important;
-    padding: 4px !important;
-  }
-
-  .char-editor-tab-rail button {
-    white-space: nowrap;
-  }
-
-  .char-editor-content {
-    padding: 16px !important;
-  }
-
-  /* Quick start cards: smaller on mobile */
-  .quick-start-cards {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  /* Agent editor: tighter padding */
-  .agent-editor-body {
-    padding: 16px !important;
-  }
-
-  .agent-editor-body .phase-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-/* ─── Small mobile (< 480px) ─── */
-@media (max-width: 479px) {
-  /* Hide topbar chat mode badge */
-  .retro-badge {
-    display: none;
-  }
-
-  /* Even more compact topbar */
-  .topbar-chat-info span.text-sm {
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-/* ─── Touch-friendly sizing ─── */
-@media (pointer: coarse) {
-  /* Larger tap targets */
-  button:not(.btn-icon-sm) {
-    min-height: 36px;
-    min-width: 36px;
-  }
-
-  /* Scrollbars: thinner on touch */
-  ::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    border-width: 0;
-  }
-}
-
-/* ─────────────────────────────────────────────
    15. SPRITES & GAME HUD
+   Character sprites overlaid on the chat area,
+   plus HP/MP/XP stat bars and inventory items.
    ───────────────────────────────────────────── */
 
-/* ─── Sprite display for roleplay ─── */
 .rpg-sprite-container {
   position: absolute;
   bottom: 0;
@@ -1143,35 +1077,55 @@ a, button, input, select, textarea {
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
 }
 
-.rpg-sprite-left {
-  left: 2%;
+.rpg-sprite-left   { left: 2%; }
+.rpg-sprite-right  { right: 2%; }
+.rpg-sprite-center { left: 50%; transform: translateX(-50%); }
+
+/* Sprite enter / active transition states */
+.rpg-sprite-enter  { opacity: 0; transform: translateY(10px); }
+.rpg-sprite-active { opacity: 1; transform: translateY(0); }
+
+/* ─── Game Stats HUD ─── */
+
+.game-stats-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
 }
 
-.rpg-sprite-right {
-  right: 2%;
+.game-stats-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
 }
 
-.rpg-sprite-center {
-  left: 50%;
-  transform: translateX(-50%);
+/* Stat bar color variants */
+.game-stats-bar-hp      { background: linear-gradient(90deg, #ef4444, #f87171); }
+.game-stats-bar-mp      { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.game-stats-bar-xp      { background: linear-gradient(90deg, #a855f7, #c084fc); }
+.game-stats-bar-stamina { background: linear-gradient(90deg, #22c55e, #4ade80); }
+
+.game-inventory-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  font-size: 11px;
+  transition: background 0.2s;
 }
 
-/* Sprite fade transition */
-.rpg-sprite-enter {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.rpg-sprite-active {
-  opacity: 1;
-  transform: translateY(0);
+.game-inventory-item:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ─────────────────────────────────────────────
    16. FUNCTION CALL CARDS
+   Display for tool-use / function call results.
    ───────────────────────────────────────────── */
 
-/* ─── Function call result card ─── */
 .fn-call-card {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%);
   border: 1px solid rgba(99, 102, 241, 0.2);
@@ -1208,45 +1162,157 @@ a, button, input, select, textarea {
   font-size: 11px;
 }
 
-/* ─── Game Stats HUD ─── */
-.game-stats-bar {
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.1);
-  overflow: hidden;
+/* ─────────────────────────────────────────────
+   17. RESPONSIVE / MOBILE
+   Breakpoints: 1024px (tablet), 768px (mobile),
+   480px (small mobile), plus touch-device sizing.
+   ───────────────────────────────────────────── */
+
+/* ─── Tablet & below (< 1024px) ─── */
+@media (max-width: 1023px) {
+  .right-panel-overlay {
+    width: 100% !important;
+    max-width: 360px;
+  }
 }
 
-.game-stats-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
+/* ─── Mobile (< 768px) ─── */
+@media (max-width: 767px) {
+  /* Safe area insets for notched phones */
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Sidebar: fixed overlay drawer */
+  .app-sidebar-mobile {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 40;
+    width: 100% !important;
+    max-width: 300px;
+  }
+
+  .app-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+  }
+
+  /* Right panel: full-screen overlay */
+  .app-right-panel-mobile {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 45;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* TopBar: compact */
+  .topbar-panel-buttons        { gap: 0 !important; padding: 2px !important; }
+  .topbar-panel-buttons button { padding: 6px !important; }
+
+  /* Smaller badges */
+  .retro-badge { padding: 2px 6px; font-size: 9px; }
+
+  /* Hide decorative elements for performance */
+  .y2k-star,
+  .y2k-star-md,
+  .y2k-star-lg        { display: none; }
+  .retro-scanlines::after { display: none; }
+  .btn-scanlines::after     { display: none; }
+  .noise-bg::before       { display: none; }
+  .geometric-grid          { background-image: none; }
+
+  /* Disable backdrop-filter on mobile for performance */
+  .glass         { backdrop-filter: none; background: var(--card); }
+  .glass-strong  { backdrop-filter: none; background: var(--card); }
+
+  /* Chat: wider bubbles */
+  .chat-msg-max-width { max-width: 95% !important; }
+
+  /* RPG chat: reduce massive 15% side padding */
+  .rpg-chat-messages-mobile { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+
+  /* RoleplayHUD widgets: shrink for mobile */
+  .rpg-hud {
+    font-size: 10px;
+  }
+
+  /* Echo Chamber: full-width bottom sheet instead of side panel */
+  .echo-chamber-panel {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-height: 40vh;
+    border-radius: 16px 16px 0 0 !important;
+  }
+
+  /* Character editor: vertical tab rail */
+  .char-editor-body     { flex-direction: column !important; }
+  .char-editor-tab-rail {
+    width: 100% !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 4px !important;
+  }
+  .char-editor-tab-rail button { white-space: nowrap; }
+  .char-editor-content { padding: 16px !important; }
+
+  /* Quick-start cards */
+  .quick-start-cards { flex-wrap: wrap; justify-content: center; }
+
+  /* Agent editor: tighter */
+  .agent-editor-body                  { padding: 16px !important; }
+  .agent-editor-body .phase-grid      { grid-template-columns: 1fr !important; }
+
+  /* Chat input: reduce padding */
+  .chat-input-container { padding: 0.5rem !important; }
+  .chat-input-container .rounded-2xl { padding-left: 0.75rem !important; padding-right: 0.5rem !important; }
 }
 
-.game-stats-bar-hp { background: linear-gradient(90deg, #ef4444, #f87171); }
-.game-stats-bar-mp { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
-.game-stats-bar-xp { background: linear-gradient(90deg, #a855f7, #c084fc); }
-.game-stats-bar-stamina { background: linear-gradient(90deg, #22c55e, #4ade80); }
+/* ─── Small mobile (< 480px) ─── */
+@media (max-width: 479px) {
+  .retro-badge { display: none; }
 
-.game-inventory-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
-  font-size: 11px;
-  transition: background 0.2s;
+  .topbar-chat-info span.text-sm {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Stack HUD action buttons vertically */
+  .rpg-hud-actions { flex-wrap: wrap; }
+
+  /* Even tighter chat input */
+  .chat-input-container .rounded-2xl { border-radius: 1rem !important; }
 }
 
-.game-inventory-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+/* ─── Touch-friendly sizing ─── */
+@media (pointer: coarse) {
+  button:not(.btn-icon-sm) { min-height: 36px; min-width: 36px; }
+  ::-webkit-scrollbar       { width: 4px; }
+  ::-webkit-scrollbar-thumb { border-width: 0; }
+
+  /* Larger tap targets for interactive elements */
+  input, select, textarea { font-size: 16px; /* prevents iOS zoom on focus */ }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SILLYTAVERN VISUAL THEME
-   A faithful recreation of SillyTavern's classic dark UI.
-   Activated via  data-visual-theme="sillytavern"  on :root.
-   ═══════════════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   18. SILLYTAVERN VISUAL THEME
+   A faithful recreation of SillyTavern’s classic
+   dark UI. Activated via data-visual-theme="sillytavern"
+   on :root. Disables Y2K effects and uses flat styling.
+   ───────────────────────────────────────────── */
 
 /* ─── Dark-mode variable overrides ─── */
 [data-visual-theme="sillytavern"],
@@ -1308,7 +1374,7 @@ a, button, input, select, textarea {
   --rgb-violet: #9070a0;
 
   /* Font: Noto Sans is SillyTavern's house font */
-  --font-y2k: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-y2k: "Straight Quotes", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* ─── Light-mode overrides for ST theme ─── */
@@ -1355,12 +1421,37 @@ a, button, input, select, textarea {
 [data-visual-theme="sillytavern"] button,
 [data-visual-theme="sillytavern"] input,
 [data-visual-theme="sillytavern"] select,
-[data-visual-theme="sillytavern"] textarea {
+[data-visual-theme="sillytavern"] textarea,
+[data-visual-theme="sillytavern"] .cursor-pointer,
+[data-visual-theme="sillytavern"] .cursor-grab,
+[data-visual-theme="sillytavern"] .cursor-help,
+[data-visual-theme="sillytavern"] .cursor-default,
+[data-visual-theme="sillytavern"] .cursor-text,
+[data-visual-theme="sillytavern"] .cursor-move,
+[data-visual-theme="sillytavern"] .cursor-not-allowed,
+[data-visual-theme="sillytavern"] input[type="color"] {
   cursor: unset !important;
 }
 [data-visual-theme="sillytavern"] a,
-[data-visual-theme="sillytavern"] button {
+[data-visual-theme="sillytavern"] button,
+[data-visual-theme="sillytavern"] .cursor-pointer,
+[data-visual-theme="sillytavern"] .cursor-grab,
+[data-visual-theme="sillytavern"] label[class*="cursor-pointer"],
+[data-visual-theme="sillytavern"] input[type="color"] {
   cursor: pointer !important;
+}
+[data-visual-theme="sillytavern"] .cursor-not-allowed,
+[data-visual-theme="sillytavern"] .disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed !important;
+}
+[data-visual-theme="sillytavern"] .cursor-grab {
+  cursor: grab !important;
+}
+[data-visual-theme="sillytavern"] .active\:cursor-grabbing:active {
+  cursor: grabbing !important;
+}
+[data-visual-theme="sillytavern"] .cursor-help {
+  cursor: help !important;
 }
 
 /* ─── Disable glow / decorative effects ─── */
@@ -1397,6 +1488,10 @@ a, button, input, select, textarea {
   display: none !important;
 }
 
+[data-visual-theme="sillytavern"] .btn-scanlines::after {
+  display: none !important;
+}
+
 [data-visual-theme="sillytavern"] .noise-bg::before {
   display: none !important;
 }
@@ -1409,6 +1504,10 @@ a, button, input, select, textarea {
 }
 
 /* ─── Simpler scrollbar ─── */
+[data-visual-theme="sillytavern"] * {
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
 [data-visual-theme="sillytavern"] ::-webkit-scrollbar {
   width: 8px;
 }
@@ -1643,4 +1742,41 @@ a, button, input, select, textarea {
 [data-visual-theme="sillytavern"][data-theme="light"] .shimmer {
   background: linear-gradient(90deg, #d8d8e0 25%, #e0e0e8 50%, #d8d8e0 75%);
   background-size: 200% 100%;
+}
+
+/* ─────────────────────────────────────────────
+   19. ACCESSIBILITY — REDUCED MOTION
+   Respect the user's motion preferences.
+   ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   20. PERFORMANCE — GPU COMPOSITING HINTS
+   Help the browser promote frequently-animated
+   elements to their own compositing layer.
+   ───────────────────────────────────────────── */
+
+/* Sprite sidebar images that crossfade via opacity */
+.rpg-sprite-container img,
+.rpg-avatar-glow img {
+  will-change: opacity;
+}
+
+/* Stat bar fills that transition width */
+.game-stats-bar-fill {
+  will-change: width;
+}
+
+/* Smooth overscroll behaviour on chat scroll areas */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }

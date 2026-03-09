@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Reusable help tooltip — hover ? icon to see explanation
 // ──────────────────────────────────────────────
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useLayoutEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { HelpCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -20,23 +21,40 @@ export function HelpTooltip({ text, size = 12, side = "top", className }: HelpTo
   const [show, setShow] = useState(false);
   const wrapRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; ready: boolean }>({ top: 0, left: 0, ready: false });
 
-  // Reposition if the tooltip overflows the viewport
-  useEffect(() => {
-    if (!show || !tipRef.current) return;
-    const rect = tipRef.current.getBoundingClientRect();
-    const el = tipRef.current;
-    if (rect.left < 8) el.style.left = "0";
-    if (rect.right > window.innerWidth - 8) {
-      el.style.left = "auto";
-      el.style.right = "0";
+  // Compute position before paint so the tooltip never flickers
+  useLayoutEffect(() => {
+    if (!show || !wrapRef.current || !tipRef.current) {
+      setPos({ top: 0, left: 0, ready: false });
+      return;
     }
-    if (rect.top < 8) {
-      el.style.top = "100%";
-      el.style.bottom = "auto";
-      el.style.marginTop = "6px";
+    const rect = wrapRef.current.getBoundingClientRect();
+    const tip = tipRef.current.getBoundingClientRect();
+    const pad = 8;
+    let top = 0;
+    let left = 0;
+
+    if (side === "top") {
+      top = rect.top - 6 - tip.height;
+      left = rect.left + rect.width / 2 - tip.width / 2;
+    } else if (side === "bottom") {
+      top = rect.bottom + 6;
+      left = rect.left + rect.width / 2 - tip.width / 2;
+    } else if (side === "left") {
+      top = rect.top + rect.height / 2 - tip.height / 2;
+      left = rect.left - 6 - tip.width;
+    } else {
+      top = rect.top + rect.height / 2 - tip.height / 2;
+      left = rect.right + 6;
     }
-  }, [show]);
+
+    // Clamp to viewport
+    left = Math.max(pad, Math.min(left, window.innerWidth - pad - tip.width));
+    top = Math.max(pad, Math.min(top, window.innerHeight - pad - tip.height));
+
+    setPos({ top, left, ready: true });
+  }, [show, side]);
 
   return (
     <span
@@ -49,34 +67,23 @@ export function HelpTooltip({ text, size = 12, side = "top", className }: HelpTo
         size={size}
         className="text-[var(--muted-foreground)] opacity-50 transition-opacity hover:opacity-100"
       />
-      {show && (
-        <div
-          ref={tipRef}
-          className={cn(
-            "pointer-events-none absolute z-[100] w-56 rounded-lg bg-[var(--popover)] px-3 py-2 text-[11px] leading-relaxed text-[var(--popover-foreground)] shadow-xl ring-1 ring-[var(--border)]",
-            side === "top" && "bottom-full left-1/2 mb-1.5 -translate-x-1/2",
-            side === "bottom" && "top-full left-1/2 mt-1.5 -translate-x-1/2",
-            side === "left" && "right-full top-1/2 mr-1.5 -translate-y-1/2",
-            side === "right" && "left-full top-1/2 ml-1.5 -translate-y-1/2",
-          )}
-        >
-          {text}
-        </div>
-      )}
+      {show &&
+        createPortal(
+          <div
+            ref={tipRef}
+            className="pointer-events-none fixed z-[9999] w-56 rounded-lg bg-[var(--popover)] px-3 py-2 text-[11px] leading-relaxed text-[var(--popover-foreground)] shadow-xl ring-1 ring-[var(--border)]"
+            style={{ top: pos.top, left: pos.left, visibility: pos.ready ? "visible" : "hidden" }}
+          >
+            {text}
+          </div>,
+          document.body,
+        )}
     </span>
   );
 }
 
 /** Helper: label text followed by a help tooltip icon */
-export function LabelWithHelp({
-  label,
-  help,
-  className,
-}: {
-  label: string;
-  help: string;
-  className?: string;
-}) {
+export function LabelWithHelp({ label, help, className }: { label: string; help: string; className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
       {label}

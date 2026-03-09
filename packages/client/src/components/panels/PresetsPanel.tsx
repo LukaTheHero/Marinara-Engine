@@ -7,17 +7,7 @@ import { useUpdateChat } from "../../hooks/use-chats";
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
 import { ChoiceSelectionModal } from "../presets/ChoiceSelectionModal";
-import {
-  Plus,
-  Upload,
-  FileText,
-  Trash2,
-  Check,
-  Copy,
-  Search,
-  Code2,
-  Hash,
-} from "lucide-react";
+import { Plus, Upload, FileText, Trash2, Check, Copy, Search, Code2, Hash } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 type PresetRow = {
@@ -99,7 +89,10 @@ export function PresetsPanel() {
 
       {/* Search */}
       <div className="relative">
-        <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+        <Search
+          size={13}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+        />
         <input
           type="text"
           placeholder="Search presets…"
@@ -124,9 +117,7 @@ export function PresetsPanel() {
           <div className="animate-float flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-400/20 to-violet-500/20">
             <FileText size={20} className="text-purple-400" />
           </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {search ? "No matching presets" : "No presets yet"}
-          </p>
+          <p className="text-xs text-[var(--muted-foreground)]">{search ? "No matching presets" : "No presets yet"}</p>
         </div>
       )}
 
@@ -147,10 +138,7 @@ export function PresetsPanel() {
               )}
             >
               {/* Click to open editor */}
-              <div
-                className="flex min-w-0 flex-1 items-center gap-3"
-                onClick={() => openPresetDetail(preset.id)}
-              >
+              <div className="flex min-w-0 flex-1 items-center gap-3" onClick={() => openPresetDetail(preset.id)}>
                 <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-400 to-violet-500 text-white shadow-sm">
                   <FileText size={16} />
                   {isSelected && (
@@ -174,15 +162,13 @@ export function PresetsPanel() {
                       {wrapFormat.toUpperCase()}
                     </span>
                     <span>{sectionCount} sections</span>
-                    {preset.author && (
-                      <span className="truncate">by {preset.author}</span>
-                    )}
+                    {preset.author && <span className="truncate">by {preset.author}</span>}
                   </div>
                 </div>
               </div>
 
               {/* Action buttons */}
-              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex shrink-0 items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-1 py-0.5 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100">
                 {activeChat && (
                   <button
                     onClick={(e) => {

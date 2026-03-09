@@ -110,8 +110,7 @@ export const useEncounterStore = create<EncounterState>((set) => ({
 
   openConfigModal: () => set({ showConfigModal: true }),
   closeConfigModal: () => set({ showConfigModal: false }),
-  updateSettings: (partial) =>
-    set((s) => ({ settings: { ...s.settings, ...partial } })),
+  updateSettings: (partial) => set((s) => ({ settings: { ...s.settings, ...partial } })),
 
   setLoading: (loading) => set({ isLoading: loading }),
   setProcessing: (processing) => set({ isProcessing: processing }),

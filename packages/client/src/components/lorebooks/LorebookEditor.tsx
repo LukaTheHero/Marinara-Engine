@@ -3,7 +3,7 @@
 // Replaces the chat area when editing a lorebook.
 // Tabs: Overview, Entries, Entry Editor
 // ──────────────────────────────────────────────
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   useLorebook,
   useUpdateLorebook,
@@ -33,9 +33,13 @@ import {
   Users,
   UserRound,
   ScrollText,
+  Download,
+  Maximize2,
+  X,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
+import { api } from "../../lib/api-client";
 import type { Lorebook, LorebookEntry, LorebookCategory } from "@rpg-engine/shared";
 
 // ── Types ──
@@ -144,7 +148,17 @@ export function LorebookEditor() {
     } finally {
       setSaving(false);
     }
-  }, [lorebookId, formName, formDescription, formCategory, formEnabled, formScanDepth, formTokenBudget, formRecursive, updateLorebook]);
+  }, [
+    lorebookId,
+    formName,
+    formDescription,
+    formCategory,
+    formEnabled,
+    formScanDepth,
+    formTokenBudget,
+    formRecursive,
+    updateLorebook,
+  ]);
 
   const handleSaveEntry = useCallback(async () => {
     if (!lorebookId || !editingEntryId || !entryForm) return;
@@ -174,6 +188,7 @@ export function LorebookEditor() {
         group: entryForm.group,
         tag: entryForm.tag,
       });
+      setDirty(false);
     } finally {
       setSaving(false);
     }
@@ -257,7 +272,11 @@ export function LorebookEditor() {
         <div className="flex-1 overflow-y-auto p-4">
           <div className="mx-auto max-w-3xl space-y-6">
             {/* Keys */}
-            <FieldGroup label="Primary Keys" icon={Key} help="Keywords that trigger this entry. When any of these words appear in the chat, this entry's content is injected into the AI's context.">
+            <FieldGroup
+              label="Primary Keys"
+              icon={Key}
+              help="Keywords that trigger this entry. When any of these words appear in the chat, this entry's content is injected into the AI's context."
+            >
               <KeysEditor
                 keys={entryForm.keys ?? []}
                 onChange={(keys) => setEntryForm((f) => (f ? { ...f, keys } : f))}
@@ -265,7 +284,11 @@ export function LorebookEditor() {
             </FieldGroup>
 
             {/* Secondary Keys */}
-            <FieldGroup label="Secondary Keys" icon={Key} help="Additional keywords used with AND/OR/NOT logic. 'AND' means both primary AND secondary must match. 'NOT' means primary must match but secondary must NOT.">
+            <FieldGroup
+              label="Secondary Keys"
+              icon={Key}
+              help="Additional keywords used with AND/OR/NOT logic. 'AND' means both primary AND secondary must match. 'NOT' means primary must match but secondary must NOT."
+            >
               <KeysEditor
                 keys={entryForm.secondaryKeys ?? []}
                 onChange={(keys) => setEntryForm((f) => (f ? { ...f, secondaryKeys: keys } : f))}
@@ -290,13 +313,17 @@ export function LorebookEditor() {
             </FieldGroup>
 
             {/* Content */}
-            <FieldGroup label="Content" icon={FileText} help="The text that gets injected into the AI's context when this entry activates. Write it as you'd want the AI to know it.">
-              <textarea
+            <FieldGroup
+              label="Content"
+              icon={FileText}
+              help="The text that gets injected into the AI's context when this entry activates. Write it as you'd want the AI to know it."
+            >
+              <ExpandableTextarea
                 value={entryForm.content ?? ""}
-                onChange={(e) => setEntryForm((f) => (f ? { ...f, content: e.target.value } : f))}
+                onChange={(v) => setEntryForm((f) => (f ? { ...f, content: v } : f))}
                 rows={8}
-                className="w-full resize-y rounded-xl bg-[var(--secondary)] p-3 text-sm ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 placeholder="The content that will be injected into the prompt when this entry activates…"
+                title="Edit Content"
               />
             </FieldGroup>
 
@@ -335,7 +362,11 @@ export function LorebookEditor() {
             </div>
 
             {/* Injection settings */}
-            <FieldGroup label="Injection" icon={Settings2} help="Controls where in the prompt this entry's content is placed. Position 0 = before chat history, 1 = after. Depth = how many messages back. Order = priority among entries.">
+            <FieldGroup
+              label="Injection"
+              icon={Settings2}
+              help="Controls where in the prompt this entry's content is placed. Position 0 = before chat history, 1 = after. Depth = how many messages back. Order = priority among entries."
+            >
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <NumberField
                   label="Position"
@@ -360,9 +391,7 @@ export function LorebookEditor() {
                   <select
                     value={entryForm.role ?? "system"}
                     onChange={(e) =>
-                      setEntryForm((f) =>
-                        f ? { ...f, role: e.target.value as "system" | "user" | "assistant" } : f,
-                      )
+                      setEntryForm((f) => (f ? { ...f, role: e.target.value as "system" | "user" | "assistant" } : f))
                     }
                     className="w-full rounded-lg bg-[var(--secondary)] px-2 py-1.5 text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                   >
@@ -375,7 +404,11 @@ export function LorebookEditor() {
             </FieldGroup>
 
             {/* Timing */}
-            <FieldGroup label="Timing" icon={Settings2} help="Sticky = stays active for N messages after triggering. Cooldown = waits N messages before it can trigger again. Delay = waits N messages before first activation.">
+            <FieldGroup
+              label="Timing"
+              icon={Settings2}
+              help="Sticky = stays active for N messages after triggering. Cooldown = waits N messages before it can trigger again. Delay = waits N messages before first activation."
+            >
               <div className="grid grid-cols-3 gap-3">
                 <NumberField
                   label="Sticky"
@@ -399,7 +432,11 @@ export function LorebookEditor() {
             </FieldGroup>
 
             {/* Group & Tag */}
-            <FieldGroup label="Group & Tag" icon={Settings2} help="Group entries together so only one from the group activates at a time. Tags are for your own organization.">
+            <FieldGroup
+              label="Group & Tag"
+              icon={Settings2}
+              help="Group entries together so only one from the group activates at a time. Tags are for your own organization."
+            >
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-[11px] text-[var(--muted-foreground)]">Group</label>
@@ -466,10 +503,7 @@ export function LorebookEditor() {
 
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
-        <button
-          onClick={handleClose}
-          className="rounded-lg p-1.5 transition-colors hover:bg-[var(--accent)]"
-        >
+        <button onClick={handleClose} className="rounded-lg p-1.5 transition-colors hover:bg-[var(--accent)]">
           <ArrowLeft size={16} />
         </button>
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm">
@@ -488,6 +522,13 @@ export function LorebookEditor() {
         >
           <Save size={13} />
           {saving ? "Saving…" : "Save"}
+        </button>
+        <button
+          onClick={() => api.download(`/lorebooks/${lorebookId}/export`)}
+          className="rounded-lg p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+          title="Export lorebook"
+        >
+          <Download size={14} />
         </button>
         <button
           onClick={handleDelete}
@@ -611,7 +652,10 @@ export function LorebookEditor() {
               {/* Scan settings */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="mb-1.5 flex items-center gap-1 text-xs font-medium">Scan Depth <HelpTooltip text="How many recent messages to scan for keyword matches. Higher = searches further back in chat history, but uses more processing." /></label>
+                  <label className="mb-1.5 flex items-center gap-1 text-xs font-medium">
+                    Scan Depth{" "}
+                    <HelpTooltip text="How many recent messages to scan for keyword matches. Higher = searches further back in chat history, but uses more processing." />
+                  </label>
                   <input
                     type="number"
                     value={formScanDepth}
@@ -624,7 +668,10 @@ export function LorebookEditor() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 flex items-center gap-1 text-xs font-medium">Token Budget <HelpTooltip text="Maximum number of tokens this lorebook can inject per generation. Prevents a lorebook from consuming too much of the context window." /></label>
+                  <label className="mb-1.5 flex items-center gap-1 text-xs font-medium">
+                    Token Budget{" "}
+                    <HelpTooltip text="Maximum number of tokens this lorebook can inject per generation. Prevents a lorebook from consuming too much of the context window." />
+                  </label>
                   <input
                     type="number"
                     value={formTokenBudget}
@@ -701,12 +748,7 @@ export function LorebookEditor() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "h-2 w-2 rounded-full",
-                          entry.enabled ? "bg-emerald-400" : "bg-zinc-500",
-                        )}
-                      />
+                      <span className={cn("h-2 w-2 rounded-full", entry.enabled ? "bg-emerald-400" : "bg-zinc-500")} />
                       <span className="truncate text-sm font-medium">{entry.name}</span>
                       {entry.constant && (
                         <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
@@ -824,15 +866,7 @@ function KeysEditor({ keys, onChange }: { keys: string[]; onChange: (keys: strin
   );
 }
 
-function ToggleButton({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
+function ToggleButton({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       onClick={() => onChange(!value)}
@@ -873,6 +907,126 @@ function NumberField({
         max={max}
         className="w-full rounded-lg bg-[var(--secondary)] px-2 py-1.5 text-xs ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
       />
+    </div>
+  );
+}
+
+/** Textarea with an expand button that opens a fullscreen modal editor. */
+function ExpandableTextarea({
+  value,
+  onChange,
+  rows,
+  placeholder,
+  title,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  placeholder?: string;
+  title?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <div className="relative">
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={rows ?? 6}
+          className="w-full resize-y rounded-xl bg-[var(--secondary)] p-3 pr-9 text-sm ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+          placeholder={placeholder}
+        />
+        <button
+          onClick={() => setExpanded(true)}
+          className="absolute right-2 top-2 rounded-md p-1 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+          title="Expand editor"
+        >
+          <Maximize2 size={13} />
+        </button>
+      </div>
+
+      {expanded && (
+        <ExpandedContentModal
+          title={title ?? "Edit"}
+          value={value}
+          onChange={onChange}
+          onClose={() => setExpanded(false)}
+          placeholder={placeholder}
+        />
+      )}
+    </>
+  );
+}
+
+/** Fullscreen modal editor for lorebook entry fields. */
+function ExpandedContentModal({
+  title,
+  value,
+  onChange,
+  onClose,
+  placeholder,
+}: {
+  title: string;
+  value: string;
+  onChange: (v: string) => void;
+  onClose: () => void;
+  placeholder?: string;
+}) {
+  const [local, setLocal] = useState(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onChange(local);
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose, onChange, local]);
+
+  const handleClose = () => {
+    onChange(local);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
+      <div className="relative flex h-[80vh] w-full max-w-3xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/50">
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <button onClick={handleClose} className="rounded-lg p-1.5 hover:bg-[var(--accent)]">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden p-4">
+          <textarea
+            ref={textareaRef}
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            className="h-full w-full resize-none rounded-lg bg-[var(--secondary)] p-4 text-sm text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+            placeholder={placeholder}
+          />
+        </div>
+        <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-2.5">
+          <p className="text-[10px] text-[var(--muted-foreground)]">
+            Changes auto-save on close. Press Escape to close.
+          </p>
+          <button
+            onClick={handleClose}
+            className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-1.5 text-xs font-medium text-white shadow-md hover:shadow-lg active:scale-[0.98]"
+          >
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

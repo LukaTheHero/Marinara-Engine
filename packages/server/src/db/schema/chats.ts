@@ -22,7 +22,9 @@ export const chats = sqliteTable("chats", {
 
 export const messages = sqliteTable("messages", {
   id: text("id").primaryKey(),
-  chatId: text("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  chatId: text("chat_id")
+    .notNull()
+    .references(() => chats.id, { onDelete: "cascade" }),
   role: text("role", { enum: ["user", "assistant", "system", "narrator"] }).notNull(),
   characterId: text("character_id"),
   content: text("content").notNull().default(""),
@@ -34,7 +36,9 @@ export const messages = sqliteTable("messages", {
 
 export const messageSwipes = sqliteTable("message_swipes", {
   id: text("id").primaryKey(),
-  messageId: text("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  messageId: text("message_id")
+    .notNull()
+    .references(() => messages.id, { onDelete: "cascade" }),
   index: integer("index").notNull(),
   content: text("content").notNull().default(""),
   /** JSON object for extra data */

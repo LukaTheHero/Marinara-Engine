@@ -3,14 +3,7 @@
 // ──────────────────────────────────────────────
 
 /** Supported API providers. */
-export type APIProvider =
-  | "openai"
-  | "anthropic"
-  | "google"
-  | "mistral"
-  | "cohere"
-  | "openrouter"
-  | "custom";
+export type APIProvider = "openai" | "anthropic" | "google" | "mistral" | "cohere" | "openrouter" | "custom";
 
 /** An API connection configuration. */
 export interface APIConnection {

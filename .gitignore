@@ -6,12 +6,13 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Database
+# Database (contains all user data: chats, characters, lorebooks, presets, connections, agents, etc.)
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
 
-# Environment
+# Environment (may contain encryption keys)
 .env
 .env.local
 .env.production
@@ -26,7 +27,7 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Data (user uploads & runtime data — all user content)
+# User data — uploaded avatars, backgrounds, sprites, and runtime files
 data/
 packages/server/data/
 

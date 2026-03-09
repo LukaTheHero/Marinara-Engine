@@ -1,38 +1,106 @@
-# 🍝 RPG Engine (Marinara Engine)
+# 🍝 Marinara Engine
 
-**AI Chat & Roleplay Frontend** — Conversation, Roleplay, Visual Novel modes with full character management, sprite systems, combat encounters, and more.
+### Alpha Release 1.0.0
 
-A local-first application that connects to any OpenAI-compatible API (OpenAI, Anthropic, Google, OpenRouter, Mistral, Cohere, or any custom endpoint).
+**An AI-powered chat & roleplay engine** — with conversation, roleplay, and visual novel modes, a full character & sprite system, 18 built-in AI agents, turn-based combat, lorebooks, and more.
+
+Everything runs locally. No accounts, no cloud, no telemetry. Connect to any OpenAI-compatible API (OpenAI, Anthropic, Google, OpenRouter, Mistral, Cohere, or any custom endpoint).
+
+> **⚠️ Alpha Software** — This is an early release. Expect rough edges, missing features, and breaking changes between versions. Bug reports and feedback are very welcome!
+
+---
+
+## Features
+
+### Chat & Roleplay
+- **Three Chat Modes** — Conversation (iMessage-style), Roleplay (immersive dark RPG), Visual Novel
+- **Character Management** — Create or import characters with avatars, personalities, backstories, and system prompts
+- **Persona System** — User personas with custom names, avatars, and descriptions
+- **Group Chats** — Multiple characters in a single conversation
+- **Chat Branching** — Branch conversations at any message and explore different paths
+- **Message Swiping** — Generate alternate responses and swipe between them
+- **SillyTavern Import** — Migrate characters, chats, presets, and settings from SillyTavern
+
+### Visual & Immersive
+- **Sprite System** — Character expression sprites with automatic emotion-based switching
+- **Custom Backgrounds** — Upload backgrounds with per-scene switching
+- **Weather Effects** — Dynamic weather overlays (rain, snow, fog, etc.)
+- **Two Visual Themes** — Y2K Marinara theme and a faithful SillyTavern classic theme
+- **Light & Dark Mode**
+
+### AI Agent System (18 Built-In)
+Agents are autonomous AI assistants that run alongside your chat, each handling a specific task:
+
+| Agent | What It Does |
+|-------|-------------|
+| **World State** | Tracks date/time, weather, location, and present characters |
+| **Quest Tracker** | Manages quest objectives, completion, and rewards |
+| **Character Tracker** | Monitors character moods, relationships, and inventory |
+| **Persona Stats** | Tracks your protagonist's HP, MP, XP, and custom stats |
+| **Narrative Director** | Introduces events, NPCs, and plot beats to keep the story moving |
+| **Prose Guardian** | Rewrites AI responses to improve prose quality |
+| **Continuity Checker** | Detects contradictions with established lore and facts |
+| **Combat** | Turn-based RPG combat with initiative, HP tracking, and actions |
+| **Expression Engine** | Detects emotions and selects character sprites |
+| **Background** | Picks the best background image for the current scene |
+| **Echo Chamber** | Simulates a live-stream chat reacting to your roleplay |
+| **Prompt Reviewer** | Reviews and scores the assembled prompt before generation |
+| **Illustrator** | Generates image prompts for key scenes |
+| **Lorebook Keeper** | Automatically creates and updates lorebook entries |
+| **Immersive HTML** | Formats roleplay output with styled HTML |
+| **Consistency Editor** | Edits responses for internal consistency |
+| **Spotify DJ** | Controls Spotify playback to match the scene mood |
+| **Chat Summarizer** | Generates condensed summaries of long conversations |
+
+All agents are disabled by default — enable only the ones you want. You can also create **custom agents** with your own prompts and tool configurations.
+
+### Prompt Engineering
+- **Preset System** — Save and load full prompt configurations (system prompt sections, sampling parameters, etc.)
+- **Prompt Sections** — Modular prompt builder with drag-and-drop ordering, depth injection, and per-section toggles
+- **Lorebooks** — World-building entries with keyword triggers that inject context automatically
+- **Regex Scripts** — Custom text processing with regex find/replace on inputs and outputs
+- **Macro System** — Template variables like `{{char}}`, `{{user}}`, `{{time}}`, and agent markers
+
+### Connections & Providers
+- **Multi-Provider** — OpenAI, Anthropic, Google, OpenRouter, Mistral, Cohere, and any custom OpenAI-compatible endpoint
+- **Encrypted API Keys** — API keys are encrypted at rest with AES-256
+- **Per-Chat Overrides** — Different presets and connections per chat
+
+### Export & Data
+- **Export Chats** — Save as JSON or Markdown
+- **Fully Local** — SQLite database, all data stays on your machine
+- **No Account Required** — Just install and go
 
 ---
 
 ## Installation
 
-### Option A: Desktop Installer (Recommended)
+### Option A: Desktop App (Recommended)
 
 Download the latest installer from the [Releases](https://github.com/your-repo/rpg-engine/releases) page:
 
 | Platform | File |
 |----------|------|
-| Windows | `RPG-Engine-Setup-x.x.x.exe` |
-| macOS | `RPG-Engine-x.x.x-arm64.dmg` (Apple Silicon) / `RPG-Engine-x.x.x-x64.dmg` (Intel) |
-| Linux | `RPG-Engine-x.x.x.AppImage` |
+| Windows | `RPG-Engine-Setup-1.0.0.exe` |
+| macOS (Apple Silicon) | `RPG-Engine-1.0.0-arm64.dmg` |
+| macOS (Intel) | `RPG-Engine-1.0.0-x64.dmg` |
+| Linux | `RPG-Engine-1.0.0.AppImage` |
 
-Just run the installer and launch. Everything is bundled — no extra setup needed.
+Just run the installer and launch — everything is bundled.
 
 ---
 
-### Option B: Run from Source (No Installer)
+### Option B: Run from Source
 
-If you'd rather not run an `.exe` (perfectly understandable!), you can run RPG Engine directly from source. This is the exact same app — just without the Electron desktop wrapper.
+If you'd rather not run an installer, you can run Marinara directly from source. Same app, just without the Electron desktop wrapper.
 
 #### Prerequisites
 
-- **[Node.js](https://nodejs.org/) v20 or newer** — download from [nodejs.org](https://nodejs.org/en/download)
+- **[Node.js v20+](https://nodejs.org/)** — download from [nodejs.org](https://nodejs.org/en/download)
 - **[pnpm](https://pnpm.io/)** — install via `corepack enable` (included with Node.js) or `npm install -g pnpm`
-- **[Git](https://git-scm.com/)** — to clone the repository
+- **[Git](https://git-scm.com/)** — to clone the repo
 
-#### Quick Start (one command)
+#### Quick Start
 
 **Windows:**
 ```
@@ -49,41 +117,25 @@ chmod +x start.sh
 ./start.sh
 ```
 
-The start script will automatically:
+The start script will:
 1. Check that Node.js and pnpm are installed
 2. Install all dependencies (first run only)
 3. Build the application
 4. Initialize the database
-5. Start the server and open your browser to `http://localhost:7860`
+5. Start the server and open `http://localhost:7860` in your browser
 
-#### Manual Step-by-Step
-
-If you prefer to do it yourself:
+#### Manual Setup
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/your-repo/rpg-engine.git
 cd rpg-engine
-
-# 2. Install dependencies
 pnpm install
-
-# 3. Build everything
 pnpm build
-
-# 4. Initialize the database
 pnpm db:push
-
-# 5. Copy and configure environment (optional)
-cp .env.example .env
-# Edit .env if you want to change the port or add an encryption key
-
-# 6. Start the server
-cd packages/server
-node dist/index.js
+pnpm start
 ```
 
-Then open **http://localhost:7860** in your browser. That's it — no account, no cloud, everything runs locally.
+Then open **http://localhost:7860**. That's it — no account, no cloud, everything runs locally.
 
 #### Updating
 
@@ -101,7 +153,7 @@ Then restart the server.
 ## Development
 
 ```bash
-# Start both server + client in dev mode (hot reload)
+# Start both server + client with hot reload
 pnpm dev
 
 # Server only (port 7860)
@@ -113,43 +165,16 @@ pnpm dev:client
 
 ### Building Desktop Installers
 
-To build the Electron desktop app yourself:
-
 ```bash
-# Install Electron dependencies
-pnpm install
-
-# Build for your current platform
-pnpm package
-
-# Build for a specific platform
-pnpm package:win    # Windows .exe installer
-pnpm package:mac    # macOS .dmg
-pnpm package:linux  # Linux .AppImage
+pnpm package          # Build for current platform
+pnpm package:win      # Windows .exe
+pnpm package:mac      # macOS .dmg
+pnpm package:linux    # Linux .AppImage
 ```
 
-Output goes to the `release/` directory.
-
-> **Note:** Cross-platform builds may require additional tools (e.g., Wine for building Windows on macOS/Linux). Building for your own platform always works.
+Output goes to `release/`.
 
 ---
-
-## Project Structure
-
-```
-rpg-engine/
-├── packages/
-│   ├── shared/          # TypeScript types & schemas (shared between client/server)
-│   ├── server/          # Fastify API server + SQLite database
-│   └── client/          # React frontend (Vite + Tailwind v4)
-├── electron/            # Electron desktop wrapper
-│   ├── main.cjs         # Main process (starts server + window)
-│   └── resources/       # App icons
-├── start.bat            # Windows launcher script
-├── start.sh             # macOS/Linux launcher script
-├── data/                # Runtime data (database, avatars, etc.)
-└── .env.example         # Environment configuration template
-```
 
 ## Configuration
 
@@ -160,44 +185,41 @@ Copy `.env.example` to `.env` to customize:
 | `PORT` | `7860` | Server port |
 | `HOST` | `0.0.0.0` | Bind address |
 | `DATABASE_URL` | `file:./data/rpg-engine.db` | SQLite database path |
-| `ENCRYPTION_KEY` | *(empty)* | AES key for API key encryption at rest |
-| `LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`) |
-| `CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins (comma-separated) |
+| `ENCRYPTION_KEY` | *(empty)* | AES key for API key encryption (generate with `openssl rand -hex 32`) |
+| `LOG_LEVEL` | `info` | Logging verbosity |
+| `CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 
 ---
 
-## Features
+## Project Structure
 
-- **Multiple Chat Modes** — Conversation, Roleplay, Visual Novel (coming soon)
-- **Character Management** — Import/create characters with avatars, personality, backstories
-- **Persona System** — User personas with custom appearances
-- **Sprite System** — Character expression sprites with automatic switching
-- **Combat Encounters** — Turn-based RPG combat with AI-generated scenarios
-- **Agent System** — World-state tracking, prose guardian, continuity checker, custom agents
-- **Lorebooks** — World-building entries with keyword triggers
-- **Preset Management** — Save/load generation parameters
-- **Multi-Provider** — OpenAI, Anthropic, Google, OpenRouter, Mistral, Cohere, custom APIs
-- **Chat Branching** — Branch conversations at any point
-- **Group Chats** — Multiple characters in one conversation
-- **Regex Scripts** — Custom text processing with regex find/replace
-- **SillyTavern Import** — Migrate characters, chats, presets, and settings
-- **Export** — Save chats as JSON or Markdown
-- **Backgrounds & Weather** — Custom chat backgrounds with dynamic weather effects
-- **Fully Local** — No accounts, no cloud, no telemetry
-
----
+```
+rpg-engine/
+├── packages/
+│   ├── shared/      # TypeScript types, schemas, constants
+│   ├── server/      # Fastify API + SQLite database + AI agents
+│   └── client/      # React frontend (Vite + Tailwind v4)
+├── electron/        # Electron desktop wrapper
+├── start.bat        # Windows launcher
+├── start.sh         # macOS/Linux launcher
+└── .env.example     # Environment template
+```
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 19, Tailwind CSS v4, Framer Motion, Zustand, React Query |
-| Backend | Fastify 5, Drizzle ORM, SQLite (better-sqlite3) |
+| Backend | Fastify 5, Drizzle ORM, SQLite |
 | Desktop | Electron 33, electron-builder |
 | Shared | TypeScript 5, Zod |
 | Build | Vite 6, pnpm workspaces |
 
 ---
+
+## License
+
+[AGPL-3.0](LICENSE)
 
 ## License
 

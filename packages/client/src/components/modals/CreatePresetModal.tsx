@@ -32,7 +32,10 @@ export function CreatePresetModal({ open, onClose }: Props) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["presets"] }),
   });
 
-  const reset = () => { setName(""); setDescription(""); };
+  const reset = () => {
+    setName("");
+    setDescription("");
+  };
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -72,7 +75,9 @@ export function CreatePresetModal({ open, onClose }: Props) {
             onChange={(e) => setName(e.target.value)}
             autoFocus
             placeholder="My Preset..."
-            onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate();
+            }}
             className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2 text-sm outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
           />
         </label>
@@ -83,13 +88,23 @@ export function CreatePresetModal({ open, onClose }: Props) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What this preset is for..."
-            onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate();
+            }}
             className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2 text-sm outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
           />
         </label>
 
         <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-3">
-          <button onClick={() => { onClose(); reset(); }} className="rounded-lg px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]">Cancel</button>
+          <button
+            onClick={() => {
+              onClose();
+              reset();
+            }}
+            className="rounded-lg px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]"
+          >
+            Cancel
+          </button>
           <button
             onClick={handleCreate}
             disabled={!name.trim() || createPreset.isPending}

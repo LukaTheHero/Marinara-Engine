@@ -10,7 +10,6 @@ import type {
   PromptPreset,
   PromptSection,
   PromptGroup,
-  ChoiceBlock,
   MarkerConfig,
   WrapFormat,
   GenerationParameters,
@@ -33,10 +32,10 @@ export interface AssemblerInput {
   preset: {
     id: string;
     name: string;
-    sectionOrder: string;  // JSON string of string[]
-    groupOrder: string;    // JSON string of string[]
-    wrapFormat: string;    // "xml" | "markdown"
-    parameters: string;    // JSON string of GenerationParameters
+    sectionOrder: string; // JSON string of string[]
+    groupOrder: string; // JSON string of string[]
+    wrapFormat: string; // "xml" | "markdown"
+    parameters: string; // JSON string of GenerationParameters
     variableGroups: string;
     variableValues: string;
   };
@@ -48,8 +47,8 @@ export interface AssemblerInput {
     name: string;
     content: string;
     role: string;
-    enabled: string;       // "true" / "false"
-    isMarker: string;      // "true" / "false"
+    enabled: string; // "true" / "false"
+    isMarker: string; // "true" / "false"
     groupId: string | null;
     markerConfig: string | null; // JSON string
     injectionPosition: string;
@@ -67,16 +66,20 @@ export interface AssemblerInput {
     enabled: string;
     createdAt: string;
   }>;
-  /** Choice blocks with their options */
+  /** Choice blocks (preset variables) with their options */
   choiceBlocks: Array<{
     id: string;
-    sectionId: string;
-    label: string;
+    presetId: string;
+    variableName: string;
+    question: string;
     options: string; // JSON string of ChoiceOption[]
+    multiSelect: string; // "true" | "false"
+    separator: string;
+    randomPick: string; // "true" | "false"
     createdAt: string;
   }>;
-  /** Per-chat choice selections: { [sectionId]: selectedOptionId } */
-  chatChoices: Record<string, string>;
+  /** Per-chat variable selections: { [variableName]: value | value[] } */
+  chatChoices: Record<string, string | string[]>;
   /** Chat context */
   chatId: string;
   characterIds: string[];
@@ -90,6 +93,8 @@ export interface AssemblerInput {
   };
   /** Chat messages from the DB (user + assistant + narrator etc.) */
   chatMessages: ChatMLMessage[];
+  /** Current chat summary text (if any) */
+  chatSummary?: string | null;
 }
 
 /** Output of the assembler. */
@@ -116,7 +121,47 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
   // Build lookup maps
   const sectionMap = new Map(input.sections.map((s) => [s.id, s]));
   const groupMap = new Map(input.groups.map((g) => [g.id, g]));
-  const choiceMap = new Map(input.choiceBlocks.map((c) => [c.sectionId, c]));
+
+  // Inject choice variable values into variableValues
+  // chatChoices is { variableName: value | value[] } — resolve and merge into variables so {{varName}} resolves
+  for (const cb of input.choiceBlocks) {
+    const isMulti = cb.multiSelect === "true";
+    const isRandom = cb.randomPick === "true";
+    const separator = cb.separator || ", ";
+    const selected = input.chatChoices[cb.variableName];
+
+    if (selected !== undefined) {
+      if (isMulti && Array.isArray(selected)) {
+        // Multi-select: either random-pick one or join all
+        if (selected.length === 0) {
+          // Fallback to first option
+          try {
+            const opts = JSON.parse(cb.options) as Array<{ value: string }>;
+            if (opts.length > 0 && opts[0]) variableValues[cb.variableName] = opts[0].value;
+          } catch {
+            /* empty */
+          }
+        } else if (isRandom) {
+          // Random pick: select one at random each generation
+          variableValues[cb.variableName] = selected[Math.floor(Math.random() * selected.length)] ?? "";
+        } else {
+          // Join all selected values with the separator
+          variableValues[cb.variableName] = selected.join(separator);
+        }
+      } else {
+        // Single-select or legacy string value
+        variableValues[cb.variableName] = Array.isArray(selected) ? (selected[0] ?? "") : selected;
+      }
+    } else {
+      // Default to first option's value if no selection yet
+      try {
+        const opts = JSON.parse(cb.options) as Array<{ value: string }>;
+        if (opts.length > 0 && opts[0]) variableValues[cb.variableName] = opts[0].value;
+      } catch {
+        /* empty */
+      }
+    }
+  }
 
   // Build macro context (character names resolved from IDs)
   const charNames = await resolveCharacterNames(input.db, input.characterIds);
@@ -127,6 +172,11 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     variables: variableValues,
   };
 
+  // Resolve macros inside variable values themselves (e.g. {{user}} in a choice value)
+  for (const key of Object.keys(variableValues)) {
+    variableValues[key] = resolveMacros(variableValues[key]!, macroCtx);
+  }
+
   // Build marker context
   const markerCtx: MarkerContext = {
     db: input.db,
@@ -136,6 +186,7 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     personaDescription: input.personaDescription,
     personaFields: input.personaFields,
     chatMessages: input.chatMessages,
+    chatSummary: input.chatSummary ?? null,
     wrapFormat,
   };
 
@@ -159,8 +210,6 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     const resolved = await resolveSection(section, {
       macroCtx,
       markerCtx,
-      choiceMap,
-      chatChoices: input.chatChoices,
       wrapFormat,
     });
 
@@ -177,6 +226,7 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
   // Build ordered messages, wrapping grouped sections
   const messages: ChatMLMessage[] = [];
   const processedSections = new Set<string>();
+  let chatHistoryEndIdx = -1; // index in messages[] after the last chat_history message
 
   // Process in section order, grouping adjacent sections in the same group
   for (let i = 0; i < orderedSections.length; i++) {
@@ -209,7 +259,12 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
       }
     } else {
       processedSections.add(section.id);
-      messages.push(...section.messages);
+      if (section.isChatHistory) {
+        messages.push(...section.messages);
+        chatHistoryEndIdx = messages.length;
+      } else {
+        messages.push(...section.messages);
+      }
     }
   }
 
@@ -234,6 +289,25 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     lorebookDepthEntriesCount = depthEntries.length;
   }
 
+  // ── Phase 6: Strict role formatting ──
+  // Forces proper role ordering: system first, then alternating user/assistant.
+  // Sections after chat history are forced to user role.
+  if (parameters.strictRoleFormatting) {
+    finalMessages = enforceStrictRoles(finalMessages, chatHistoryEndIdx);
+  }
+
+  // ── Phase 7: Single user message mode ──
+  // Collapses entire prompt into one user message.
+  if (parameters.singleUserMessage) {
+    const combined = finalMessages
+      .map((m) => {
+        if (m.role !== "user") return `[${m.role.toUpperCase()}]\n${m.content}`;
+        return m.content;
+      })
+      .join("\n\n");
+    finalMessages = [{ role: "user", content: combined }];
+  }
+
   return {
     messages: finalMessages,
     parameters,
@@ -251,13 +325,12 @@ interface ResolvedSection {
   role: "system" | "user" | "assistant";
   messages: ChatMLMessage[];
   depth: number;
+  isChatHistory?: boolean;
 }
 
 interface ResolveSectionCtx {
   macroCtx: MacroContext;
   markerCtx: MarkerContext;
-  choiceMap: Map<string, { id: string; sectionId: string; label: string; options: string }>;
-  chatChoices: Record<string, string>;
   wrapFormat: WrapFormat;
 }
 
@@ -271,19 +344,7 @@ async function resolveSection(
 ): Promise<ResolvedSection | null> {
   const role = section.role as "system" | "user" | "assistant";
 
-  // Check for choice block — override content if user has selected an option
   let content = section.content;
-  const choiceBlock = ctx.choiceMap.get(section.id);
-  if (choiceBlock) {
-    const selectedOptionId = ctx.chatChoices[section.id];
-    if (selectedOptionId) {
-      const options = JSON.parse(choiceBlock.options) as Array<{ id: string; content: string }>;
-      const selected = options.find((o) => o.id === selectedOptionId);
-      if (selected) {
-        content = selected.content;
-      }
-    }
-  }
 
   // Handle marker sections
   if (section.isMarker === "true" && section.markerConfig) {
@@ -298,12 +359,24 @@ async function resolveSection(
         role,
         messages: expanded.messages,
         depth: section.injectionDepth,
+        isChatHistory: true,
       };
     }
 
-    // Other markers return content to be wrapped
-    content = expanded.content;
-    if (!content.trim()) return null;
+    // Agent data markers: if section has editable content with {{agent::TYPE}} macro,
+    // inject expanded data via the macro context so the user's template is preserved
+    if (markerConfig.type === "agent_data" && section.content && section.content.trim()) {
+      const agentType = markerConfig.agentType ?? "";
+      ctx.macroCtx.agentData = {
+        ...ctx.macroCtx.agentData,
+        [agentType]: expanded.content,
+      };
+      content = section.content;
+    } else {
+      // Other markers return content to be wrapped
+      content = expanded.content;
+      if (!content.trim()) return null;
+    }
   }
 
   // Resolve macros
@@ -342,9 +415,7 @@ function buildGroupMessages(
   if (roles.size === 1) {
     // All same role — combine content and wrap in group
     const role = sections[0]!.role;
-    const innerContent = sections
-      .flatMap((s) => s.messages.map((m) => m.content))
-      .join("\n\n");
+    const innerContent = sections.flatMap((s) => s.messages.map((m) => m.content)).join("\n\n");
     const wrapped = wrapGroup(innerContent, group.name, wrapFormat);
     return [{ role, content: wrapped || innerContent }];
   }
@@ -400,4 +471,64 @@ async function resolveCharacterNames(db: DB, characterIds: string[]): Promise<st
   }
 
   return names;
+}
+
+/**
+ * Enforce strict role formatting:
+ * 1. Leading system messages stay as system.
+ * 2. Sections after chat_history are forced to user role.
+ * 3. Ensures alternating user/assistant after the system block.
+ *    Adjacent same-role messages are merged.
+ */
+function enforceStrictRoles(messages: ChatMLMessage[], chatHistoryEndIdx: number): ChatMLMessage[] {
+  if (messages.length === 0) return messages;
+
+  // Step 1: Force post-chat-history non-user/assistant messages to user
+  if (chatHistoryEndIdx > 0) {
+    messages = messages.map((m, i) => {
+      if (i >= chatHistoryEndIdx && m.role === "system") {
+        return { ...m, role: "user" as const };
+      }
+      return m;
+    });
+  }
+
+  // Step 2: Collect leading system block
+  const result: ChatMLMessage[] = [];
+  let idx = 0;
+  const systemParts: string[] = [];
+  while (idx < messages.length && messages[idx]!.role === "system") {
+    systemParts.push(messages[idx]!.content);
+    idx++;
+  }
+  if (systemParts.length > 0) {
+    result.push({ role: "system", content: systemParts.join("\n\n") });
+  }
+
+  // Step 3: The rest must alternate user/assistant.
+  // First non-system should be user.
+  let expectedRole: "user" | "assistant" = "user";
+  for (; idx < messages.length; idx++) {
+    const msg = messages[idx]!;
+    const effectiveRole = msg.role === "system" ? "user" : msg.role;
+
+    if (effectiveRole === expectedRole) {
+      result.push({ ...msg, role: effectiveRole });
+      expectedRole = effectiveRole === "user" ? "assistant" : "user";
+    } else {
+      // Wrong role — merge into the previous message of the same role, or
+      // if this would break alternation, force it to the expected role.
+      const prev = result[result.length - 1];
+      if (prev && prev.role === effectiveRole) {
+        // Merge into previous (same role back-to-back)
+        prev.content += "\n\n" + msg.content;
+      } else {
+        // Force to expected role to maintain alternation
+        result.push({ ...msg, role: expectedRole });
+        expectedRole = expectedRole === "user" ? "assistant" : "user";
+      }
+    }
+  }
+
+  return result;
 }

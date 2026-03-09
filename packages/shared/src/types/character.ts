@@ -44,7 +44,21 @@ export interface CharacterExtensions {
   dialogueColor?: string;
   /** Marinara Engine: Chat bubble / dialogue box background color */
   boxColor?: string;
+  /** Marinara Engine: RPG stats toggle + custom attributes */
+  rpgStats?: RPGStatsConfig;
   [key: string]: unknown;
+}
+
+/** RPG stats configuration attached to a character card. */
+export interface RPGStatsConfig {
+  /** Whether RPG stats are enabled for this character */
+  enabled: boolean;
+  /** Custom attribute list (e.g. STR, DEX, CHA — user can rename/add/remove) */
+  attributes: Array<{ name: string; value: number; max: number }>;
+  /** Hit Points */
+  hp: { value: number; max: number };
+  /** Magic/Mana Points */
+  mp: { value: number; max: number };
 }
 
 /** Depth-injected prompt attached to a character. */

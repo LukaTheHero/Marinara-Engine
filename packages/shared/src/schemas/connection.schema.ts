@@ -3,10 +3,7 @@
 // ──────────────────────────────────────────────
 import { z } from "zod";
 
-export const apiProviderSchema = z.enum([
-  "openai", "anthropic", "google", "mistral",
-  "cohere", "openrouter", "custom",
-]);
+export const apiProviderSchema = z.enum(["openai", "anthropic", "google", "mistral", "cohere", "openrouter", "custom"]);
 
 export const createConnectionSchema = z.object({
   name: z.string().min(1).max(200),
@@ -17,6 +14,7 @@ export const createConnectionSchema = z.object({
   maxContext: z.number().int().min(1).default(128000),
   isDefault: z.boolean().default(false),
   useForRandom: z.boolean().default(false),
+  enableCaching: z.boolean().default(false),
 });
 
 export type CreateConnectionInput = z.infer<typeof createConnectionSchema>;

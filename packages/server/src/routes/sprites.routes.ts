@@ -59,7 +59,10 @@ export async function spritesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "No image data provided" });
     }
 
-    const expression = body.expression.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+    const expression = body.expression
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "_");
 
     // Parse base64
     let base64 = body.image;
@@ -119,37 +122,34 @@ export async function spritesRoutes(app: FastifyInstance) {
    * GET /api/sprites/:characterId/file/:filename
    * Serve a sprite image file.
    */
-  app.get<{ Params: { characterId: string; filename: string } }>(
-    "/:characterId/file/:filename",
-    async (req, reply) => {
-      const { characterId, filename } = req.params;
+  app.get<{ Params: { characterId: string; filename: string } }>("/:characterId/file/:filename", async (req, reply) => {
+    const { characterId, filename } = req.params;
 
-      // Prevent path traversal
-      if (filename.includes("..") || filename.includes("/") || characterId.includes("..")) {
-        return reply.status(400).send({ error: "Invalid path" });
-      }
+    // Prevent path traversal
+    if (filename.includes("..") || filename.includes("/") || characterId.includes("..")) {
+      return reply.status(400).send({ error: "Invalid path" });
+    }
 
-      const filePath = join(SPRITES_ROOT, characterId, filename);
-      if (!existsSync(filePath)) {
-        return reply.status(404).send({ error: "Not found" });
-      }
+    const filePath = join(SPRITES_ROOT, characterId, filename);
+    if (!existsSync(filePath)) {
+      return reply.status(404).send({ error: "Not found" });
+    }
 
-      const ext = extname(filename).toLowerCase();
-      const mimeMap: Record<string, string> = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-        ".avif": "image/avif",
-        ".svg": "image/svg+xml",
-      };
+    const ext = extname(filename).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".gif": "image/gif",
+      ".webp": "image/webp",
+      ".avif": "image/avif",
+      ".svg": "image/svg+xml",
+    };
 
-      const stream = createReadStream(filePath);
-      return reply
-        .header("Content-Type", mimeMap[ext] ?? "application/octet-stream")
-        .header("Cache-Control", "public, max-age=31536000, immutable")
-        .send(stream);
-    },
-  );
+    const stream = createReadStream(filePath);
+    return reply
+      .header("Content-Type", mimeMap[ext] ?? "application/octet-stream")
+      .header("Cache-Control", "public, max-age=31536000, immutable")
+      .send(stream);
+  });
 }

@@ -1,0 +1,106 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ──────────────────────────────────────────────
+# RPG Engine — Start Script (Termux / Android)
+# ──────────────────────────────────────────────
+set -e
+
+echo ""
+echo "  ╔══════════════════════════════════════════╗"
+echo "  ║      RPG Engine  —  Termux Launcher      ║"
+echo "  ╚══════════════════════════════════════════╝"
+echo ""
+
+# Navigate to script directory
+cd "$(dirname "$0")"
+
+# ── Check Node.js ──
+if ! command -v node &> /dev/null; then
+    echo "  [..] Node.js not found — installing via pkg..."
+    pkg install -y nodejs-lts
+fi
+
+NODE_VERSION=$(node -v | cut -d'.' -f1 | tr -d 'v')
+echo "  [OK] Node.js $(node -v) found"
+
+if [ "$NODE_VERSION" -lt 20 ]; then
+    echo "  [WARN] Node.js 20+ is recommended. You have v${NODE_VERSION}."
+    echo "         Run:  pkg upgrade nodejs-lts"
+fi
+
+# ── Check pnpm ──
+if ! command -v pnpm &> /dev/null; then
+    echo "  [..] pnpm not found, installing globally..."
+    npm install -g pnpm
+fi
+echo "  [OK] pnpm found"
+
+# ── Check git (needed for some npm deps) ──
+if ! command -v git &> /dev/null; then
+    echo "  [..] git not found — installing via pkg..."
+    pkg install -y git
+fi
+
+# ── Check python (needed for node-gyp native builds) ──
+if ! command -v python3 &> /dev/null; then
+    echo "  [..] python3 not found — installing via pkg..."
+    pkg install -y python
+fi
+
+# ── Install dependencies ──
+if [ ! -d "node_modules" ]; then
+    echo ""
+    echo "  [..] Installing dependencies (first run)..."
+    echo "       This may take several minutes on mobile."
+    echo ""
+    pnpm install
+fi
+
+# ── Build if needed ──
+if [ ! -d "packages/shared/dist" ]; then
+    echo "  [..] Building shared types..."
+    pnpm build:shared
+fi
+if [ ! -d "packages/server/dist" ]; then
+    echo "  [..] Building server..."
+    pnpm build:server
+fi
+if [ ! -d "packages/client/dist" ]; then
+    echo "  [..] Building client..."
+    pnpm build:client
+fi
+
+# ── Database schema ──
+echo "  [..] Syncing database schema..."
+pnpm db:push 2>/dev/null || true
+
+# ── Detect IP address for LAN access ──
+LOCAL_IP=$(ip -4 addr show wlan0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || echo "")
+if [ -z "$LOCAL_IP" ]; then
+    LOCAL_IP=$(ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -n 1 || echo "")
+fi
+
+# ── Start ──
+echo ""
+echo "  ══════════════════════════════════════════"
+echo "    Starting RPG Engine on http://localhost:7860"
+if [ -n "$LOCAL_IP" ]; then
+echo "    LAN access: http://${LOCAL_IP}:7860"
+fi
+echo ""
+echo "    Open the URL above in your mobile browser."
+echo "    Press Ctrl+C to stop"
+echo "  ══════════════════════════════════════════"
+echo ""
+
+export NODE_ENV=production
+export PORT=7860
+export HOST=0.0.0.0
+
+# Open in Termux browser if available (no-op if not)
+if command -v termux-open-url &> /dev/null; then
+    (sleep 3 && termux-open-url "http://localhost:7860") &
+fi
+
+# Start server
+cd packages/server
+exec node dist/index.js

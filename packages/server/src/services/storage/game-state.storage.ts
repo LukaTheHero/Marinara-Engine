@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Game State Snapshots
 // ──────────────────────────────────────────────
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, ne, desc } from "drizzle-orm";
 import type { DB } from "../../db/connection.js";
 import { gameStateSnapshots } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -19,17 +19,39 @@ export function createGameStateStorage(db: DB) {
       return rows[0] ?? null;
     },
 
+    /** Get the latest committed game state — the one the user "accepted" by sending their next message. */
+    async getLatestCommitted(chatId: string) {
+      const rows = await db
+        .select()
+        .from(gameStateSnapshots)
+        .where(and(eq(gameStateSnapshots.chatId, chatId), eq(gameStateSnapshots.committed, 1)))
+        .orderBy(desc(gameStateSnapshots.createdAt))
+        .limit(1);
+      return rows[0] ?? null;
+    },
+
+    /** Get latest game state excluding snapshots tied to a specific message (for regen/swipes). */
+    async getLatestExcludingMessage(chatId: string, excludeMessageId: string) {
+      const rows = await db
+        .select()
+        .from(gameStateSnapshots)
+        .where(and(eq(gameStateSnapshots.chatId, chatId), ne(gameStateSnapshots.messageId, excludeMessageId)))
+        .orderBy(desc(gameStateSnapshots.createdAt))
+        .limit(1);
+      return rows[0] ?? null;
+    },
+
     async getByMessage(messageId: string, swipeIndex: number = 0) {
       const rows = await db
         .select()
         .from(gameStateSnapshots)
-        .where(
-          and(
-            eq(gameStateSnapshots.messageId, messageId),
-            eq(gameStateSnapshots.swipeIndex, swipeIndex),
-          ),
-        );
+        .where(and(eq(gameStateSnapshots.messageId, messageId), eq(gameStateSnapshots.swipeIndex, swipeIndex)));
       return rows[0] ?? null;
+    },
+
+    /** Mark a specific snapshot as committed. */
+    async commit(id: string) {
+      await db.update(gameStateSnapshots).set({ committed: 1 }).where(eq(gameStateSnapshots.id, id));
     },
 
     async create(state: Omit<GameState, "id" | "createdAt">) {
@@ -47,9 +69,32 @@ export function createGameStateStorage(db: DB) {
         presentCharacters: JSON.stringify(state.presentCharacters),
         recentEvents: JSON.stringify(state.recentEvents),
         playerStats: state.playerStats ? JSON.stringify(state.playerStats) : null,
+        personaStats: state.personaStats ? JSON.stringify(state.personaStats) : null,
         createdAt: now(),
       });
       return id;
+    },
+
+    async updateLatest(
+      chatId: string,
+      fields: Partial<Pick<GameState, "date" | "time" | "location" | "weather" | "temperature" | "presentCharacters">>,
+    ) {
+      const latest = await this.getLatest(chatId);
+      if (!latest) return null;
+      const updates: Record<string, unknown> = {};
+      if (fields.date !== undefined) updates.date = fields.date;
+      if (fields.time !== undefined) updates.time = fields.time;
+      if (fields.location !== undefined) updates.location = fields.location;
+      if (fields.weather !== undefined) updates.weather = fields.weather;
+      if (fields.temperature !== undefined) updates.temperature = fields.temperature;
+      if (fields.presentCharacters !== undefined) updates.presentCharacters = JSON.stringify(fields.presentCharacters);
+      if (Object.keys(updates).length === 0) return latest;
+      await db.update(gameStateSnapshots).set(updates).where(eq(gameStateSnapshots.id, latest.id));
+      return { ...latest, ...updates };
+    },
+
+    async deleteForChat(chatId: string) {
+      await db.delete(gameStateSnapshots).where(eq(gameStateSnapshots.chatId, chatId));
     },
   };
 }

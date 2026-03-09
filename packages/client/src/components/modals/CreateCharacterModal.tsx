@@ -101,13 +101,7 @@ export function CreateCharacterModal({ open, onClose }: Props) {
             <Camera size={20} className="text-white" />
           </div>
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleAvatarPick}
-        />
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarPick} />
 
         {/* Name */}
         <div className="w-full">
@@ -117,7 +111,9 @@ export function CreateCharacterModal({ open, onClose }: Props) {
             onChange={(e) => setName(e.target.value)}
             placeholder="Character name..."
             autoFocus
-            onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate();
+            }}
             className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2 text-sm outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
           />
         </div>
@@ -125,7 +121,10 @@ export function CreateCharacterModal({ open, onClose }: Props) {
         {/* Footer */}
         <div className="flex w-full justify-end gap-2 border-t border-[var(--border)] pt-3">
           <button
-            onClick={() => { onClose(); reset(); }}
+            onClick={() => {
+              onClose();
+              reset();
+            }}
             className="rounded-lg px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]"
           >
             Cancel
@@ -135,11 +134,7 @@ export function CreateCharacterModal({ open, onClose }: Props) {
             disabled={!name.trim() || createCharacter.isPending}
             className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-2 text-xs font-medium text-[var(--primary-foreground)] transition-all hover:opacity-90 disabled:opacity-50"
           >
-            {createCharacter.isPending ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Sparkles size={12} />
-            )}
+            {createCharacter.isPending ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             Create
           </button>
         </div>

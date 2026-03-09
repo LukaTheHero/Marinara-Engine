@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Chats
 // ──────────────────────────────────────────────
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, lt, sql, count } from "drizzle-orm";
 import type { DB } from "../../db/connection.js";
 import { chats, messages, messageSwipes } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -30,7 +30,7 @@ export function createChatsStorage(db: DB) {
         personaId: input.personaId,
         promptPresetId: input.promptPresetId,
         connectionId: input.connectionId,
-        metadata: JSON.stringify({ summary: null, tags: [], agentsEnabled: true, agentOverrides: {} }),
+        metadata: JSON.stringify({ summary: null, tags: [], enableAgents: true, agentOverrides: {} }),
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -71,10 +71,49 @@ export function createChatsStorage(db: DB) {
       await db.delete(chats).where(eq(chats.id, id));
     },
 
+    /** Delete all chats in a group (all branches). */
+    async removeGroup(groupId: string) {
+      await db.delete(chats).where(eq(chats.groupId, groupId));
+    },
+
     // ── Messages ──
 
     async listMessages(chatId: string) {
-      return db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(messages.createdAt);
+      const rows = await db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(messages.createdAt);
+      const swipeCounts = await db
+        .select({ messageId: messageSwipes.messageId, count: count() })
+        .from(messageSwipes)
+        .where(sql`${messageSwipes.messageId} IN (SELECT id FROM messages WHERE chat_id = ${chatId})`)
+        .groupBy(messageSwipes.messageId);
+      const countMap = new Map(swipeCounts.map((r) => [r.messageId, r.count]));
+      return rows.map((m) => ({ ...m, swipeCount: countMap.get(m.id) ?? 0 }));
+    },
+
+    /** Paginated: returns the latest `limit` messages (optionally before a cursor). */
+    async listMessagesPaginated(chatId: string, limit: number, before?: string) {
+      const conditions = [eq(messages.chatId, chatId)];
+      if (before) conditions.push(lt(messages.createdAt, before));
+      const rows = await db
+        .select()
+        .from(messages)
+        .where(and(...conditions))
+        .orderBy(desc(messages.createdAt))
+        .limit(limit);
+      const reversed = rows.reverse();
+      const ids = reversed.map((m) => m.id);
+      if (ids.length === 0) return reversed;
+      const swipeCounts = await db
+        .select({ messageId: messageSwipes.messageId, count: count() })
+        .from(messageSwipes)
+        .where(
+          sql`${messageSwipes.messageId} IN (${sql.join(
+            ids.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
+        )
+        .groupBy(messageSwipes.messageId);
+      const countMap = new Map(swipeCounts.map((r) => [r.messageId, r.count]));
+      return reversed.map((m) => ({ ...m, swipeCount: countMap.get(m.id) ?? 0 }));
     },
 
     async getMessage(id: string) {
@@ -92,7 +131,12 @@ export function createChatsStorage(db: DB) {
         characterId: input.characterId,
         content: input.content,
         activeSwipeIndex: 0,
-        extra: JSON.stringify({ displayText: null, isGenerated: input.role !== "user", tokenCount: null, generationInfo: null }),
+        extra: JSON.stringify({
+          displayText: null,
+          isGenerated: input.role !== "user",
+          tokenCount: null,
+          generationInfo: null,
+        }),
         createdAt: timestamp,
       });
       // Create the initial swipe (index 0)
@@ -114,6 +158,19 @@ export function createChatsStorage(db: DB) {
       return this.getMessage(id);
     },
 
+    /** Merge partial data into a message's extra JSON field. */
+    async updateMessageExtra(id: string, partial: Record<string, unknown>) {
+      const msg = await this.getMessage(id);
+      if (!msg) return null;
+      const existing = typeof msg.extra === "string" ? JSON.parse(msg.extra) : (msg.extra ?? {});
+      const merged = { ...existing, ...partial };
+      await db
+        .update(messages)
+        .set({ extra: JSON.stringify(merged) })
+        .where(eq(messages.id, id));
+      return this.getMessage(id);
+    },
+
     async removeMessage(id: string) {
       await db.delete(messages).where(eq(messages.id, id));
     },
@@ -125,6 +182,21 @@ export function createChatsStorage(db: DB) {
     async addSwipe(messageId: string, content: string) {
       const existing = await this.getSwipes(messageId);
       const nextIndex = existing.length;
+
+      // Backfill: save current message extra onto the currently-active swipe
+      // so its thinking/generationInfo isn't lost when we switch away
+      const msg = await this.getMessage(messageId);
+      if (msg) {
+        const msgExtra = typeof msg.extra === "string" ? JSON.parse(msg.extra) : (msg.extra ?? {});
+        const activeSwipe = existing.find((s: any) => s.index === msg.activeSwipeIndex);
+        if (activeSwipe) {
+          await db
+            .update(messageSwipes)
+            .set({ extra: JSON.stringify(msgExtra) })
+            .where(eq(messageSwipes.id, activeSwipe.id));
+        }
+      }
+
       const id = newId();
       await db.insert(messageSwipes).values({
         id,
@@ -134,8 +206,19 @@ export function createChatsStorage(db: DB) {
         extra: JSON.stringify({}),
         createdAt: now(),
       });
-      // Set active swipe to the new one
-      await db.update(messages).set({ activeSwipeIndex: nextIndex, content }).where(eq(messages.id, messageId));
+      // Set active swipe to the new one and reset message extra for the fresh swipe
+      // (thinking/generationInfo will be populated by updateMessageExtra after generation)
+      const clearedExtra = msg
+        ? {
+            ...(typeof msg.extra === "string" ? JSON.parse(msg.extra) : (msg.extra ?? {})),
+            thinking: null,
+            generationInfo: null,
+          }
+        : {};
+      await db
+        .update(messages)
+        .set({ activeSwipeIndex: nextIndex, content, extra: JSON.stringify(clearedExtra) })
+        .where(eq(messages.id, messageId));
       return { id, index: nextIndex };
     },
 
@@ -143,8 +226,44 @@ export function createChatsStorage(db: DB) {
       const swipes = await this.getSwipes(messageId);
       const target = swipes.find((s: any) => s.index === index);
       if (!target) return null;
-      await db.update(messages).set({ activeSwipeIndex: index, content: target.content }).where(eq(messages.id, messageId));
+
+      // Before switching, save current message extra onto the outgoing swipe
+      const msg = await this.getMessage(messageId);
+      if (msg) {
+        const msgExtra = typeof msg.extra === "string" ? JSON.parse(msg.extra) : (msg.extra ?? {});
+        const outgoingSwipe = swipes.find((s: any) => s.index === msg.activeSwipeIndex);
+        if (outgoingSwipe) {
+          await db
+            .update(messageSwipes)
+            .set({ extra: JSON.stringify(msgExtra) })
+            .where(eq(messageSwipes.id, outgoingSwipe.id));
+        }
+      }
+
+      // Sync the target swipe's extra onto the message
+      const swipeExtra = typeof target.extra === "string" ? JSON.parse(target.extra) : (target.extra ?? {});
+      await db
+        .update(messages)
+        .set({
+          activeSwipeIndex: index,
+          content: target.content,
+          extra: JSON.stringify(swipeExtra),
+        })
+        .where(eq(messages.id, messageId));
       return this.getMessage(messageId);
+    },
+
+    /** Merge partial data into a swipe's extra JSON field. */
+    async updateSwipeExtra(messageId: string, swipeIndex: number, partial: Record<string, unknown>) {
+      const swipes = await this.getSwipes(messageId);
+      const target = swipes.find((s: any) => s.index === swipeIndex);
+      if (!target) return;
+      const existing = typeof target.extra === "string" ? JSON.parse(target.extra) : (target.extra ?? {});
+      const merged = { ...existing, ...partial };
+      await db
+        .update(messageSwipes)
+        .set({ extra: JSON.stringify(merged) })
+        .where(eq(messageSwipes.id, target.id));
     },
   };
 }

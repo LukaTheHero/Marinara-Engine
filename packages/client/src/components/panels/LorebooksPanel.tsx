@@ -31,9 +31,7 @@ export function LorebooksPanel() {
   const [activeCategory, setActiveCategory] = useState<LorebookCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: lorebooks, isLoading } = useLorebooks(
-    activeCategory === "all" ? undefined : activeCategory,
-  );
+  const { data: lorebooks, isLoading } = useLorebooks(activeCategory === "all" ? undefined : activeCategory);
   const deleteLorebook = useDeleteLorebook();
   const openModal = useUIStore((s) => s.openModal);
   const openLorebookDetail = useUIStore((s) => s.openLorebookDetail);
@@ -44,8 +42,7 @@ export function LorebooksPanel() {
     if (!searchQuery) return lorebooks;
     const q = searchQuery.toLowerCase();
     return lorebooks.filter(
-      (lb: Lorebook) =>
-        lb.name.toLowerCase().includes(q) || lb.description.toLowerCase().includes(q),
+      (lb: Lorebook) => lb.name.toLowerCase().includes(q) || lb.description.toLowerCase().includes(q),
     );
   }, [lorebooks, searchQuery]);
 
@@ -89,7 +86,10 @@ export function LorebooksPanel() {
 
       {/* Search */}
       <div className="relative">
-        <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+        <Search
+          size={13}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+        />
         <input
           type="text"
           placeholder="Search lorebooks…"
@@ -146,40 +146,38 @@ export function LorebooksPanel() {
       {/* Lorebook list */}
       {!isLoading && filtered.length > 0 && (
         <div className="stagger-children flex flex-col gap-1">
-          {activeCategory === "all" && grouped ? (
-            // Grouped view
-            Array.from(grouped.entries()).map(([category, books]) => {
-              const catMeta = CATEGORIES.find((c) => c.id === category) ?? CATEGORIES[5];
-              const CatIcon = catMeta.icon;
-              return (
-                <div key={category} className="mb-2">
-                  <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                    <CatIcon size={11} />
-                    {catMeta.label}
-                    <span className="ml-auto text-[10px] font-normal">{books.length}</span>
+          {activeCategory === "all" && grouped
+            ? // Grouped view
+              Array.from(grouped.entries()).map(([category, books]) => {
+                const catMeta = CATEGORIES.find((c) => c.id === category) ?? CATEGORIES[5];
+                const CatIcon = catMeta.icon;
+                return (
+                  <div key={category} className="mb-2">
+                    <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                      <CatIcon size={11} />
+                      {catMeta.label}
+                      <span className="ml-auto text-[10px] font-normal">{books.length}</span>
+                    </div>
+                    {books.map((lb) => (
+                      <LorebookRow
+                        key={lb.id}
+                        lorebook={lb}
+                        onClick={() => openLorebookDetail(lb.id)}
+                        onDelete={() => deleteLorebook.mutate(lb.id)}
+                      />
+                    ))}
                   </div>
-                  {books.map((lb) => (
-                    <LorebookRow
-                      key={lb.id}
-                      lorebook={lb}
-                      onClick={() => openLorebookDetail(lb.id)}
-                      onDelete={() => deleteLorebook.mutate(lb.id)}
-                    />
-                  ))}
-                </div>
-              );
-            })
-          ) : (
-            // Flat view
-            filtered.map((lb: Lorebook) => (
-              <LorebookRow
-                key={lb.id}
-                lorebook={lb}
-                onClick={() => openLorebookDetail(lb.id)}
-                onDelete={() => deleteLorebook.mutate(lb.id)}
-              />
-            ))
-          )}
+                );
+              })
+            : // Flat view
+              filtered.map((lb: Lorebook) => (
+                <LorebookRow
+                  key={lb.id}
+                  lorebook={lb}
+                  onClick={() => openLorebookDetail(lb.id)}
+                  onDelete={() => deleteLorebook.mutate(lb.id)}
+                />
+              ))}
         </div>
       )}
     </div>

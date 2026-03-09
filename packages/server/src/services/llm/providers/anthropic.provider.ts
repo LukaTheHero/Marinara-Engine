@@ -1,17 +1,14 @@
 // ──────────────────────────────────────────────
 // LLM Provider — Anthropic Claude
 // ──────────────────────────────────────────────
-import { BaseLLMProvider, type ChatMessage, type ChatOptions } from "../base-provider.js";
+import { BaseLLMProvider, type ChatMessage, type ChatOptions, type LLMUsage } from "../base-provider.js";
 
 /**
  * Handles Anthropic Claude API (Messages API).
  */
 export class AnthropicProvider extends BaseLLMProvider {
-  async *chat(
-    messages: ChatMessage[],
-    options: ChatOptions,
-  ): AsyncGenerator<string, void, unknown> {
-    const url = `${this.baseUrl}/v1/messages`;
+  async *chat(messages: ChatMessage[], options: ChatOptions): AsyncGenerator<string, LLMUsage | void, unknown> {
+    const url = `${this.baseUrl}/messages`;
 
     // Claude requires system prompt separate from messages
     const systemMessages = messages.filter((m) => m.role === "system");
@@ -20,20 +17,54 @@ export class AnthropicProvider extends BaseLLMProvider {
     // Ensure alternating user/assistant pattern (Claude requirement)
     const mergedMessages = this.mergeConsecutiveMessages(chatMessages);
 
-    const body = {
+    const enableCaching = options.enableCaching ?? false;
+
+    // Build system field — use content blocks with cache_control when caching is on
+    let systemField: string | Array<{ type: string; text: string; cache_control?: { type: string } }> | undefined;
+    if (systemMessages.length > 0) {
+      if (enableCaching) {
+        // Array of content blocks with cache_control on the last one
+        const blocks = systemMessages.map((m, i) => ({
+          type: "text" as const,
+          text: m.content,
+          ...(i === systemMessages.length - 1 && { cache_control: { type: "ephemeral" } }),
+        }));
+        systemField = blocks;
+      } else {
+        systemField = systemMessages.map((m) => m.content).join("\n\n");
+      }
+    }
+
+    // When caching, find the last user message index for the cache breakpoint
+    const lastUserIdx = enableCaching ? mergedMessages.reduce((acc, m, i) => (m.role === "user" ? i : acc), -1) : -1;
+
+    const body: Record<string, unknown> = {
       model: options.model,
       max_tokens: options.maxTokens ?? 4096,
-      ...(systemMessages.length > 0 && {
-        system: systemMessages.map((m) => m.content).join("\n\n"),
+      ...(systemField !== undefined && { system: systemField }),
+      messages: mergedMessages.map((m, i) => {
+        if (i === lastUserIdx) {
+          return {
+            role: m.role,
+            content: [{ type: "text", text: m.content, cache_control: { type: "ephemeral" } }],
+          };
+        }
+        return { role: m.role, content: m.content };
       }),
-      messages: mergedMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
       stream: options.stream ?? true,
       ...(options.temperature !== undefined && { temperature: options.temperature }),
       ...(options.topP !== undefined && { top_p: options.topP }),
     };
+
+    // Enable extended thinking for reasoning models
+    if (options.enableThinking) {
+      const budgetTokens = Math.max(1024, Math.min(options.maxTokens ?? 4096, 16000));
+      body.thinking = { type: "enabled", budget_tokens: budgetTokens };
+      // Anthropic requires max_tokens to be > budget_tokens
+      body.max_tokens = (options.maxTokens ?? 4096) + budgetTokens;
+      // Cannot use temperature with extended thinking
+      delete body.temperature;
+    }
 
     const response = await fetch(url, {
       method: "POST",
@@ -52,9 +83,22 @@ export class AnthropicProvider extends BaseLLMProvider {
 
     if (!options.stream) {
       const json = (await response.json()) as {
-        content: Array<{ type: string; text: string }>;
+        content: Array<{ type: string; text?: string; thinking?: string }>;
+        usage?: { input_tokens: number; output_tokens: number };
       };
+      // Extract thinking content if present
+      const thinkingBlock = json.content.find((c) => c.type === "thinking");
+      if (thinkingBlock?.thinking && options.onThinking) {
+        options.onThinking(thinkingBlock.thinking);
+      }
       yield json.content.find((c) => c.type === "text")?.text ?? "";
+      if (json.usage) {
+        return {
+          promptTokens: json.usage.input_tokens,
+          completionTokens: json.usage.output_tokens,
+          totalTokens: json.usage.input_tokens + json.usage.output_tokens,
+        };
+      }
       return;
     }
 
@@ -64,6 +108,9 @@ export class AnthropicProvider extends BaseLLMProvider {
 
     const decoder = new TextDecoder();
     let buffer = "";
+    let currentBlockType = "text"; // track whether we're in a thinking or text block
+    let inputTokens = 0;
+    let outputTokens = 0;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -81,16 +128,48 @@ export class AnthropicProvider extends BaseLLMProvider {
         try {
           const event = JSON.parse(data) as {
             type: string;
-            delta?: { type: string; text?: string };
+            message?: { usage?: { input_tokens: number; output_tokens: number } };
+            content_block?: { type: string };
+            delta?: { type: string; text?: string; thinking?: string };
+            usage?: { output_tokens: number };
           };
-          if (event.type === "content_block_delta" && event.delta?.text) {
-            yield event.delta.text;
+          // Capture input token count from message_start
+          if (event.type === "message_start" && event.message?.usage) {
+            inputTokens = event.message.usage.input_tokens;
+            outputTokens = event.message.usage.output_tokens;
           }
-          if (event.type === "message_stop") return;
+          // Capture final output token count from message_delta
+          if (event.type === "message_delta" && event.usage) {
+            outputTokens = event.usage.output_tokens;
+          }
+          // Track block type (thinking vs text)
+          if (event.type === "content_block_start" && event.content_block) {
+            currentBlockType = event.content_block.type;
+          }
+          if (event.type === "content_block_delta") {
+            if (currentBlockType === "thinking" && event.delta?.thinking && options.onThinking) {
+              options.onThinking(event.delta.thinking);
+            } else if (event.delta?.text) {
+              yield event.delta.text;
+            }
+          }
+          if (event.type === "message_stop") {
+            if (inputTokens || outputTokens) {
+              return {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: inputTokens + outputTokens,
+              };
+            }
+            return;
+          }
         } catch {
           // Skip malformed lines
         }
       }
+    }
+    if (inputTokens || outputTokens) {
+      return { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens };
     }
   }
 

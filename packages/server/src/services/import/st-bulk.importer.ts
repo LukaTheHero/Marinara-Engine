@@ -86,7 +86,7 @@ async function listFilesRecursive(dir: string, ext?: string): Promise<string[]> 
   for (const e of entries) {
     const full = join(dir, e.name);
     if (e.isDirectory()) {
-      results.push(...await listFilesRecursive(full, ext));
+      results.push(...(await listFilesRecursive(full, ext)));
     } else if (!ext || extname(e.name).toLowerCase() === ext) {
       results.push(full);
     }
@@ -112,14 +112,25 @@ export interface STBulkScanResult {
 export async function scanSTFolder(rootPath: string): Promise<STBulkScanResult> {
   // Validate
   if (!existsSync(rootPath)) {
-    return { success: false, error: "Folder does not exist", characters: [], chats: [], groupChats: [], presets: [], lorebooks: [], backgrounds: [], personas: [] };
+    return {
+      success: false,
+      error: "Folder does not exist",
+      characters: [],
+      chats: [],
+      groupChats: [],
+      presets: [],
+      lorebooks: [],
+      backgrounds: [],
+      personas: [],
+    };
   }
 
   const dataDir = resolveSTDataDir(rootPath);
   if (!dataDir) {
     return {
       success: false,
-      error: "Could not find SillyTavern data directory. Make sure the path points to your SillyTavern installation folder.",
+      error:
+        "Could not find SillyTavern data directory. Make sure the path points to your SillyTavern installation folder.",
       characters: [],
       chats: [],
       groupChats: [],
@@ -478,7 +489,7 @@ export async function runSTBulkImport(
     for (const lb of scanResult.lorebooks) {
       try {
         const raw = JSON.parse(await readFile(lb.path, "utf-8"));
-        await importSTLorebook(raw, db);
+        await importSTLorebook(raw, db, { fallbackName: lb.name });
         imported.lorebooks++;
       } catch (err) {
         errors.push(`Lorebook "${lb.name}": ${(err as Error).message}`);

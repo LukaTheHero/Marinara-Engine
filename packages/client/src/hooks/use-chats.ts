@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // React Query: Chat hooks
 // ──────────────────────────────────────────────
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
-import type { Chat, Message } from "@rpg-engine/shared";
+import type { Chat, Message, MessageSwipe } from "@rpg-engine/shared";
 
 export const chatKeys = {
   all: ["chats"] as const,
@@ -17,6 +17,7 @@ export function useChats() {
   return useQuery({
     queryKey: chatKeys.list(),
     queryFn: () => api.get<Chat[]>("/chats"),
+    staleTime: 2 * 60_000,
   });
 }
 
@@ -25,13 +26,25 @@ export function useChat(id: string | null) {
     queryKey: chatKeys.detail(id ?? ""),
     queryFn: () => api.get<Chat>(`/chats/${id}`),
     enabled: !!id,
+    staleTime: 60_000,
   });
 }
 
-export function useChatMessages(chatId: string | null) {
-  return useQuery({
+export function useChatMessages(chatId: string | null, pageSize: number = 0) {
+  return useInfiniteQuery({
     queryKey: chatKeys.messages(chatId ?? ""),
-    queryFn: () => api.get<Message[]>(`/chats/${chatId}/messages`),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageSize > 0) params.set("limit", String(pageSize));
+      if (pageParam) params.set("before", pageParam);
+      const qs = params.toString();
+      return api.get<Message[]>(`/chats/${chatId}/messages${qs ? `?${qs}` : ""}`);
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => {
+      if (pageSize <= 0 || lastPage.length < pageSize) return undefined;
+      return lastPage[0]?.createdAt;
+    },
     enabled: !!chatId,
   });
 }
@@ -61,11 +74,29 @@ export function useDeleteChat() {
   });
 }
 
+export function useDeleteChatGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (groupId: string) => api.delete(`/chats/group/${groupId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.list() }),
+  });
+}
+
 export function useUpdateChat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name?: string; mode?: string; connectionId?: string | null; promptPresetId?: string | null; characterIds?: string[] }) =>
-      api.patch<Chat>(`/chats/${id}`, data),
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      name?: string;
+      mode?: string;
+      connectionId?: string | null;
+      promptPresetId?: string | null;
+      personaId?: string | null;
+      characterIds?: string[];
+    }) => api.patch<Chat>(`/chats/${id}`, data),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: chatKeys.detail(vars.id) });
       qc.invalidateQueries({ queryKey: chatKeys.list() });
@@ -84,16 +115,67 @@ export function useUpdateChatMetadata() {
   });
 }
 
-export function useDeleteMessage(chatId: string | null) {
+export function useCreateMessage(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (messageId: string) =>
-      api.delete(`/chats/${chatId}/messages/${messageId}`),
+    mutationFn: (data: { role: string; content: string; characterId?: string | null }) =>
+      api.post<Message>(`/chats/${chatId}/messages`, data),
     onSuccess: () => {
       if (chatId) {
         qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
       }
     },
+  });
+}
+
+export function useDeleteMessage(chatId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => api.delete(`/chats/${chatId}/messages/${messageId}`),
+    onSuccess: () => {
+      if (chatId) {
+        qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
+      }
+    },
+  });
+}
+
+/** Edit a message's content */
+export function useUpdateMessage(chatId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
+      api.patch<Message>(`/chats/${chatId}/messages/${messageId}`, { content }),
+    onSuccess: () => {
+      if (chatId) {
+        qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
+      }
+    },
+  });
+}
+
+/** Update a message's extra metadata (partial merge) */
+export function useUpdateMessageExtra(chatId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, extra }: { messageId: string; extra: Record<string, unknown> }) =>
+      api.patch<Message>(`/chats/${chatId}/messages/${messageId}/extra`, extra),
+    onSuccess: () => {
+      if (chatId) {
+        qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
+      }
+    },
+  });
+}
+
+/** Peek at the assembled prompt for a chat */
+export function usePeekPrompt() {
+  return useMutation({
+    mutationFn: (chatId: string) =>
+      api.post<{ messages: Array<{ role: string; content: string }>; parameters: unknown }>(
+        `/chats/${chatId}/peek-prompt`,
+        {},
+      ),
   });
 }
 
@@ -123,7 +205,21 @@ export function useBranchChat() {
   return useMutation({
     mutationFn: ({ chatId, upToMessageId }: { chatId: string; upToMessageId?: string }) =>
       api.post<Chat>(`/chats/${chatId}/branch`, { upToMessageId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.list() }),
+    onSuccess: (_data, { chatId }) => {
+      qc.invalidateQueries({ queryKey: chatKeys.list() });
+      qc.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
+    },
+  });
+}
+
+/** Generate a rolling summary for a chat via the LLM */
+export function useGenerateSummary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (chatId: string) => api.post<{ summary: string }>(`/chats/${chatId}/generate-summary`, {}),
+    onSuccess: (_data, chatId) => {
+      qc.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
+    },
   });
 }
 
@@ -133,5 +229,26 @@ export function useClearAllData() {
   return useMutation({
     mutationFn: () => api.post<{ success: boolean }>("/admin/clear-all", { confirm: true }),
     onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+/** Fetch swipes for a message */
+export function useSwipes(chatId: string | null, messageId: string | null) {
+  return useQuery({
+    queryKey: [...chatKeys.all, "swipes", messageId ?? ""],
+    queryFn: () => api.get<MessageSwipe[]>(`/chats/${chatId}/messages/${messageId}/swipes`),
+    enabled: !!chatId && !!messageId,
+  });
+}
+
+/** Set the active swipe for a message */
+export function useSetActiveSwipe(chatId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, index }: { messageId: string; index: number }) =>
+      api.put<Message>(`/chats/${chatId}/messages/${messageId}/active-swipe`, { index }),
+    onSuccess: () => {
+      if (chatId) qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
+    },
   });
 }

@@ -1,6 +1,6 @@
 {
   "name": "rpg-engine",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha",
   "private": true,
   "description": "AI Chat & Roleplay Frontend — Conversation, Roleplay, Visual Novel",
   "author": "Marianna",
@@ -24,6 +24,7 @@
     "package:win": "pnpm build && node electron/bundle-server.cjs && electron-builder --config electron-builder.cjs --win",
     "package:mac": "pnpm build && node electron/bundle-server.cjs && electron-builder --config electron-builder.cjs --mac",
     "package:linux": "pnpm build && node electron/bundle-server.cjs && electron-builder --config electron-builder.cjs --linux",
+    "format": "prettier --write \"packages/**/*.{ts,tsx}\"",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
     "db:push": "pnpm --filter @rpg-engine/server db:push",
@@ -34,7 +35,8 @@
   "devDependencies": {
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
-    "esbuild": "^0.27.3"
+    "esbuild": "^0.27.3",
+    "prettier": "^3.8.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -21,14 +21,14 @@ export function ModalRenderer() {
 
   return (
     <>
-      <CreateCharacterModal  open={type === "create-character"}  onClose={closeModal} />
-      <ImportCharacterModal  open={type === "import-character"}  onClose={closeModal} />
-      <CharacterMakerModal   open={type === "character-maker"}   onClose={closeModal} />
-      <CreateLorebookModal   open={type === "create-lorebook"}   onClose={closeModal} />
-      <ImportLorebookModal   open={type === "import-lorebook"}   onClose={closeModal} />
-      <LorebookMakerModal    open={type === "lorebook-maker"}    onClose={closeModal} />
-      <CreatePresetModal     open={type === "create-preset"}     onClose={closeModal} />
-      <ImportPresetModal     open={type === "import-preset"}     onClose={closeModal} />
+      <CreateCharacterModal open={type === "create-character"} onClose={closeModal} />
+      <ImportCharacterModal open={type === "import-character"} onClose={closeModal} />
+      <CharacterMakerModal open={type === "character-maker"} onClose={closeModal} />
+      <CreateLorebookModal open={type === "create-lorebook"} onClose={closeModal} />
+      <ImportLorebookModal open={type === "import-lorebook"} onClose={closeModal} />
+      <LorebookMakerModal open={type === "lorebook-maker"} onClose={closeModal} />
+      <CreatePresetModal open={type === "create-preset"} onClose={closeModal} />
+      <ImportPresetModal open={type === "import-preset"} onClose={closeModal} />
       <EditAgentModal
         open={type === "edit-agent"}
         onClose={closeModal}

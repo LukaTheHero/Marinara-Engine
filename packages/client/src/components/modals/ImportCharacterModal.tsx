@@ -74,12 +74,22 @@ export function ImportCharacterModal({ open, onClose }: Props) {
   };
 
   return (
-    <Modal open={open} onClose={() => { reset(); onClose(); }} title="Import Character">
+    <Modal
+      open={open}
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      title="Import Character"
+    >
       <div className="flex flex-col gap-4">
         {/* Drop zone */}
         <div
           onDrop={handleDrop}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
           onClick={() => fileRef.current?.click()}
           className={`flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed p-8 transition-all ${
@@ -88,7 +98,10 @@ export function ImportCharacterModal({ open, onClose }: Props) {
               : "border-[var(--border)] hover:border-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50"
           }`}
         >
-          <Upload size={32} className={`transition-colors ${dragOver ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`} />
+          <Upload
+            size={32}
+            className={`transition-colors ${dragOver ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}
+          />
           <div className="text-center">
             <p className="text-sm font-medium">Drop a file here or click to browse</p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">Supports JSON and PNG (with embedded data)</p>
@@ -138,7 +151,10 @@ export function ImportCharacterModal({ open, onClose }: Props) {
         {/* Footer */}
         <div className="flex justify-end border-t border-[var(--border)] pt-3">
           <button
-            onClick={() => { reset(); onClose(); }}
+            onClick={() => {
+              reset();
+              onClose();
+            }}
             className="rounded-lg px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]"
           >
             Close

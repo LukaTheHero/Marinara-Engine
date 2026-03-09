@@ -1,0 +1,232 @@
+// ──────────────────────────────────────────────
+// Agent Pipeline — Phase Orchestration (Batched)
+// ──────────────────────────────────────────────
+// Coordinates the 3 agent phases around the main generation:
+//   1. pre_generation  → inject context before the LLM call
+//   2. parallel        → fire alongside (after) the main generation
+//   3. post_processing → analyze/modify the completed response
+//
+// Agents that share the same provider+model are BATCHED into a
+// single LLM call to reduce total requests. Agents with different
+// connections are grouped separately and run in parallel.
+// ──────────────────────────────────────────────
+import type { AgentResult, AgentContext, AgentPhase } from "@rpg-engine/shared";
+import type { BaseLLMProvider } from "../llm/base-provider.js";
+import { executeAgent, executeAgentBatch, type AgentExecConfig } from "./agent-executor.js";
+
+/** A fully resolved agent ready for execution. */
+export interface ResolvedAgent extends AgentExecConfig {
+  provider: BaseLLMProvider;
+  model: string;
+}
+
+/** Callback fired whenever an agent produces a result. */
+export type AgentResultCallback = (result: AgentResult) => void;
+
+// ──────────────────────────────────────────────
+// Grouping — batch agents by (provider instance, model)
+// ──────────────────────────────────────────────
+
+interface AgentGroup {
+  provider: BaseLLMProvider;
+  model: string;
+  agents: ResolvedAgent[];
+}
+
+/**
+ * Group agents by shared provider+model so they can be batched.
+ * We use the provider reference + model string as the key.
+ */
+function groupByProviderModel(agents: ResolvedAgent[]): AgentGroup[] {
+  const groups = new Map<string, AgentGroup>();
+
+  for (const agent of agents) {
+    // Use a composite key: object reference hash + model
+    // Two agents share a group if they have the same provider instance and model
+    const key = `${providerKey(agent.provider)}::${agent.model}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { provider: agent.provider, model: agent.model, agents: [] };
+      groups.set(key, group);
+    }
+    group.agents.push(agent);
+  }
+
+  return Array.from(groups.values());
+}
+
+// Simple provider identity via a WeakMap-backed counter
+const providerIds = new WeakMap<BaseLLMProvider, number>();
+let nextProviderId = 0;
+function providerKey(provider: BaseLLMProvider): number {
+  let id = providerIds.get(provider);
+  if (id === undefined) {
+    id = nextProviderId++;
+    providerIds.set(provider, id);
+  }
+  return id;
+}
+
+/**
+ * Execute a group of agents — batch if >1, single if 1.
+ * Returns results and fires the onResult callback per agent.
+ */
+async function executeGroup(
+  group: AgentGroup,
+  context: AgentContext,
+  onResult?: AgentResultCallback,
+): Promise<AgentResult[]> {
+  const results = await executeAgentBatch(group.agents, context, group.provider, group.model);
+
+  for (const result of results) {
+    onResult?.(result);
+  }
+
+  return results;
+}
+
+/**
+ * Execute all agents for a given phase, grouped + batched.
+ */
+async function executePhase(
+  agents: ResolvedAgent[],
+  phase: string,
+  context: AgentContext,
+  onResult?: AgentResultCallback,
+): Promise<AgentResult[]> {
+  const phaseAgents = agents.filter((a) => a.phase === phase);
+  if (phaseAgents.length === 0) return [];
+
+  const groups = groupByProviderModel(phaseAgents);
+
+  // Run groups in parallel (different providers/models can work concurrently)
+  const settled = await Promise.allSettled(groups.map((group) => executeGroup(group, context, onResult)));
+
+  const results: AgentResult[] = [];
+  for (const entry of settled) {
+    if (entry.status === "fulfilled") {
+      results.push(...entry.value);
+    }
+  }
+  return results;
+}
+
+// ──────────────────────────────────────────────
+// Phase Runners
+// ──────────────────────────────────────────────
+
+/**
+ * Run pre-generation agents (batched per provider+model).
+ * Returns text snippets to inject into the main prompt.
+ */
+export async function runPreGenerationAgents(
+  agents: ResolvedAgent[],
+  context: AgentContext,
+  onResult?: AgentResultCallback,
+  agentTypeFilter?: (agentType: string) => boolean,
+): Promise<string[]> {
+  const filtered = agentTypeFilter ? agents.filter((a) => agentTypeFilter(a.type)) : agents;
+  const results = await executePhase(filtered, "pre_generation", context, onResult);
+
+  const injections: string[] = [];
+  for (const result of results) {
+    if (!result.success) continue;
+
+    // prose-guardian & director produce text to inject
+    if (result.type === "context_injection" || result.type === "director_event") {
+      const text = typeof result.data === "string" ? result.data : ((result.data as any)?.text ?? "");
+      if (text) injections.push(text);
+    }
+    // prompt_review is informational — the onResult callback streams it
+  }
+
+  return injections;
+}
+
+/**
+ * Run post-processing agents (batched per provider+model).
+ * Returns all results for the caller to apply.
+ */
+export async function runPostProcessingAgents(
+  agents: ResolvedAgent[],
+  context: AgentContext,
+  onResult?: AgentResultCallback,
+): Promise<AgentResult[]> {
+  return executePhase(agents, "post_processing", context, onResult);
+}
+
+/**
+ * Run parallel-phase agents (batched per provider+model).
+ */
+export async function runParallelAgents(
+  agents: ResolvedAgent[],
+  context: AgentContext,
+  onResult?: AgentResultCallback,
+): Promise<AgentResult[]> {
+  return executePhase(agents, "parallel", context, onResult);
+}
+
+// ──────────────────────────────────────────────
+// Full Pipeline (convenience wrapper)
+// ──────────────────────────────────────────────
+
+export interface AgentPipelineResult {
+  /** Text snippets injected before generation (from pre-gen agents) */
+  contextInjections: string[];
+  /** All agent results from every phase */
+  allResults: AgentResult[];
+}
+
+/**
+ * Run ALL enabled agents across the full pipeline.
+ * Call `runPreGeneration` before generating, then call `runPostAndParallel`
+ * after the response is complete, passing the final response text.
+ *
+ * Within each phase, agents that share the same provider+model are
+ * batched into a single LLM call.
+ */
+export function createAgentPipeline(
+  agents: ResolvedAgent[],
+  baseContext: AgentContext,
+  onResult?: AgentResultCallback,
+) {
+  const allResults: AgentResult[] = [];
+
+  const wrappedOnResult: AgentResultCallback = (result) => {
+    allResults.push(result);
+    onResult?.(result);
+  };
+
+  return {
+    /**
+     * Phase 1: Run pre-generation agents.
+     * Returns context injection strings to prepend to the prompt.
+     */
+    async preGenerate(agentTypeFilter?: (agentType: string) => boolean): Promise<string[]> {
+      return runPreGenerationAgents(agents, baseContext, wrappedOnResult, agentTypeFilter);
+    },
+
+    /**
+     * Phase 2 + 3: Run post-processing and parallel agents concurrently.
+     * Must be called after the main response is available.
+     */
+    async postGenerate(mainResponse: string): Promise<AgentResult[]> {
+      const fullContext: AgentContext = {
+        ...baseContext,
+        mainResponse,
+      };
+
+      const [postResults, parallelResults] = await Promise.all([
+        runPostProcessingAgents(agents, fullContext, wrappedOnResult),
+        runParallelAgents(agents, fullContext, wrappedOnResult),
+      ]);
+
+      return [...postResults, ...parallelResults];
+    },
+
+    /** All results collected so far. */
+    get results() {
+      return allResults;
+    },
+  };
+}

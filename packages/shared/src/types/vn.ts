@@ -32,14 +32,7 @@ export interface VNSprite {
 }
 
 /** Allowed sprite positions on the VN stage. */
-export type VNSpritePosition =
-  | "far-left"
-  | "left"
-  | "center-left"
-  | "center"
-  | "center-right"
-  | "right"
-  | "far-right";
+export type VNSpritePosition = "far-left" | "left" | "center-left" | "center" | "center-right" | "right" | "far-right";
 
 /** Scene transition effects. */
 export interface VNTransition {

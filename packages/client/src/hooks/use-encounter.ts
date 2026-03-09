@@ -57,8 +57,7 @@ export function useEncounter() {
   const sendAction = useCallback(
     async (actionText: string) => {
       if (!activeChatId) return;
-      const { party, enemies, environment, playerActions, encounterLog, settings } =
-        useEncounterStore.getState();
+      const { party, enemies, environment, playerActions, encounterLog, settings } = useEncounterStore.getState();
 
       store.setProcessing(true);
       store.setError(null);

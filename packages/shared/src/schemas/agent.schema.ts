@@ -3,14 +3,25 @@
 // ──────────────────────────────────────────────
 import { z } from "zod";
 
-export const agentPhaseSchema = z.enum([
-  "pre_generation", "parallel", "post_processing",
-]);
+export const agentPhaseSchema = z.enum(["pre_generation", "parallel", "post_processing"]);
 
 export const agentResultTypeSchema = z.enum([
-  "game_state_update", "text_rewrite", "sprite_change",
-  "echo_message", "quest_update", "image_prompt",
-  "context_injection", "continuity_check", "director_event",
+  "game_state_update",
+  "text_rewrite",
+  "sprite_change",
+  "echo_message",
+  "quest_update",
+  "image_prompt",
+  "context_injection",
+  "continuity_check",
+  "director_event",
+  "lorebook_update",
+  "prompt_review",
+  "background_change",
+  "character_tracker_update",
+  "persona_stats_update",
+  "chat_summary",
+  "spotify_control",
 ]);
 
 export const createAgentConfigSchema = z.object({

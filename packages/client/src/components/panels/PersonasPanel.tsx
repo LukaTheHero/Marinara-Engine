@@ -10,15 +10,7 @@ import {
   useUploadPersonaAvatar,
 } from "../../hooks/use-characters";
 import { useUIStore } from "../../stores/ui.store";
-import {
-  Plus,
-  Trash2,
-  User,
-  Loader2,
-  Pencil,
-  Camera,
-  Star,
-} from "lucide-react";
+import { Plus, Trash2, User, Loader2, Pencil, Camera, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
 
@@ -45,8 +37,7 @@ export function PersonasPanel() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [avatarTargetId, setAvatarTargetId] = useState<string | null>(null);
 
-  const isActive = (p: PersonaRow) =>
-    p.isActive === true || p.isActive === "true";
+  const isActive = (p: PersonaRow) => p.isActive === true || p.isActive === "true";
 
   const handleCreate = () => {
     createPersona.mutate({ name: "New Persona", description: "" });
@@ -92,22 +83,12 @@ export function PersonasPanel() {
         disabled={createPersona.isPending}
         className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-all active:scale-[0.98] bg-gradient-to-r from-emerald-400 to-teal-500 text-white shadow-md shadow-emerald-400/15 hover:shadow-lg hover:shadow-emerald-400/25 disabled:opacity-50"
       >
-        {createPersona.isPending ? (
-          <Loader2 size={13} className="animate-spin" />
-        ) : (
-          <Plus size={13} />
-        )}
+        {createPersona.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
         New Persona
       </button>
 
       {/* Hidden file input for avatar uploads */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleAvatarUpload}
-      />
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
 
       {isLoading && (
         <div className="flex flex-col gap-2 py-2">
@@ -122,9 +103,7 @@ export function PersonasPanel() {
           <div className="animate-float flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400/20 to-teal-500/20">
             <User size={20} className="text-emerald-400" />
           </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            No personas yet — create one!
-          </p>
+          <p className="text-xs text-[var(--muted-foreground)]">No personas yet — create one!</p>
         </div>
       )}
 
@@ -144,19 +123,15 @@ export function PersonasPanel() {
               {/* Avatar */}
               <button
                 onClick={(e) => handleAvatarClick(e, persona.id)}
-                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-sm overflow-hidden group/avatar"
+                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-sm group/avatar"
                 title="Change avatar"
               >
                 {persona.avatarPath ? (
-                  <img
-                    src={persona.avatarPath}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={persona.avatarPath} alt="" className="h-full w-full rounded-xl object-cover" />
                 ) : (
                   <User size={16} />
                 )}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/avatar:opacity-100">
+                <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 opacity-0 transition-opacity group-hover/avatar:opacity-100">
                   <Camera size={12} className="text-white" />
                 </div>
                 {active && (
@@ -178,7 +153,10 @@ export function PersonasPanel() {
               <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                 {!active && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); activatePersona.mutate(persona.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      activatePersona.mutate(persona.id);
+                    }}
                     className="rounded-lg p-1.5 text-emerald-400 transition-colors hover:bg-emerald-400/10"
                     title="Set as active"
                   >
@@ -186,14 +164,20 @@ export function PersonasPanel() {
                   </button>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); openPersonaDetail(persona.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openPersonaDetail(persona.id);
+                  }}
                   className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
                   title="Edit"
                 >
                   <Pencil size={13} />
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); deletePersona.mutate(persona.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deletePersona.mutate(persona.id);
+                  }}
                   className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
                   title="Delete"
                 >

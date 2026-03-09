@@ -50,6 +50,7 @@ export function createConnectionsStorage(db: DB) {
         maxContext: input.maxContext ?? 128000,
         isDefault: String(input.isDefault ?? false),
         useForRandom: String(input.useForRandom ?? false),
+        enableCaching: String(input.enableCaching ?? false),
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -73,16 +74,16 @@ export function createConnectionsStorage(db: DB) {
       if (data.useForRandom !== undefined) {
         updateFields.useForRandom = String(data.useForRandom);
       }
+      if (data.enableCaching !== undefined) {
+        updateFields.enableCaching = String(data.enableCaching);
+      }
       await db.update(apiConnections).set(updateFields).where(eq(apiConnections.id, id));
       return this.getById(id);
     },
 
     /** Get all connections marked for the random pool (with decrypted keys). */
     async listRandomPool() {
-      const rows = await db
-        .select()
-        .from(apiConnections)
-        .where(eq(apiConnections.useForRandom, "true"));
+      const rows = await db.select().from(apiConnections).where(eq(apiConnections.useForRandom, "true"));
       return rows.map((r: any) => ({ ...r, apiKey: decryptApiKey(r.apiKeyEncrypted) }));
     },
 

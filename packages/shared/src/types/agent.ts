@@ -23,7 +23,12 @@ export type AgentResultType =
   | "continuity_check"
   | "director_event"
   | "lorebook_update"
-  | "prompt_review";
+  | "prompt_review"
+  | "background_change"
+  | "character_tracker_update"
+  | "persona_stats_update"
+  | "chat_summary"
+  | "spotify_control";
 
 /** Configuration for a single agent. */
 export interface AgentConfig {
@@ -80,7 +85,11 @@ export interface AgentContext {
   /** Active characters in the chat */
   characters: Array<{ id: string; name: string; description: string }>;
   /** User persona info */
-  persona: { name: string; description: string } | null;
+  persona: {
+    name: string;
+    description: string;
+    personaStats?: { enabled: boolean; bars: Array<{ name: string; value: number; max: number; color: string }> };
+  } | null;
   /** The agent's own persistent memory (key-value) */
   memory: Record<string, unknown>;
   /** Lorebook entries activated for this generation (read context) */
@@ -101,7 +110,17 @@ export const BUILT_IN_AGENT_IDS = {
   ILLUSTRATOR: "illustrator",
   LOREBOOK_KEEPER: "lorebook-keeper",
   PROMPT_REVIEWER: "prompt-reviewer",
+  COMBAT: "combat",
+  BACKGROUND: "background",
+  CHARACTER_TRACKER: "character-tracker",
+  PERSONA_STATS: "persona-stats",
+  HTML: "html",
+  CHAT_SUMMARY: "chat-summary",
+  SPOTIFY: "spotify",
+  EDITOR: "editor",
 } as const;
+
+export type AgentCategory = "writer" | "tracker" | "misc";
 
 export interface BuiltInAgentMeta {
   id: string;
@@ -109,20 +128,204 @@ export interface BuiltInAgentMeta {
   description: string;
   phase: AgentPhase;
   enabledByDefault: boolean;
+  /** Whether "Add as Prompt Section" should default to on when first created */
+  defaultInjectAsSection?: boolean;
+  category: AgentCategory;
 }
 
 export const BUILT_IN_AGENTS: BuiltInAgentMeta[] = [
-  { id: "world-state", name: "World State", description: "Tracks date/time, weather, location, and present characters automatically.", phase: "post_processing", enabledByDefault: true },
-  { id: "prose-guardian", name: "Prose Guardian", description: "Silently reviews output quality and nudges the model toward better prose.", phase: "pre_generation", enabledByDefault: true },
-  { id: "continuity", name: "Continuity Checker", description: "Detects contradictions with established lore and facts.", phase: "post_processing", enabledByDefault: true },
-  { id: "expression", name: "Expression Engine", description: "Detects character emotions and selects VN sprites/expressions.", phase: "post_processing", enabledByDefault: false },
-  { id: "echo-chamber", name: "EchoChamber", description: "Generates brief in-character reactions from inactive group members.", phase: "parallel", enabledByDefault: false },
-  { id: "director", name: "Narrative Director", description: "Introduces events, NPCs, and plot beats to keep the story moving.", phase: "pre_generation", enabledByDefault: false },
-  { id: "quest", name: "Quest Tracker", description: "Manages quest objectives, completion states, and rewards.", phase: "post_processing", enabledByDefault: false },
-  { id: "illustrator", name: "Illustrator", description: "Generates image prompts for key scenes (requires image generation API).", phase: "parallel", enabledByDefault: false },
-  { id: "lorebook-keeper", name: "Lorebook Keeper", description: "Automatically creates and updates lorebook entries based on story events, new characters, and world changes.", phase: "post_processing", enabledByDefault: false },
-  { id: "prompt-reviewer", name: "Prompt Reviewer", description: "Analyses your prompt preset for clarity, redundancy, and formatting issues, and suggests improvements.", phase: "pre_generation", enabledByDefault: false },
+  // ── Writer Agents ──
+  {
+    id: "prose-guardian",
+    name: "Prose Guardian",
+    description:
+      "Analyzes recent messages for repetition, rhetorical patterns, and sentence structure — then generates strict writing directives to force variety and freshness.",
+    phase: "pre_generation",
+    enabledByDefault: false,
+    category: "writer",
+  },
+  {
+    id: "continuity",
+    name: "Continuity Checker",
+    description: "Detects contradictions with established lore and facts.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    category: "writer",
+  },
+  {
+    id: "director",
+    name: "Narrative Director",
+    description: "Introduces events, NPCs, and plot beats to keep the story moving.",
+    phase: "pre_generation",
+    enabledByDefault: false,
+    defaultInjectAsSection: true,
+    category: "writer",
+  },
+  {
+    id: "echo-chamber",
+    name: "Echo Chamber",
+    description: "Simulates a live streaming-style chat reacting to your roleplay in real time.",
+    phase: "parallel",
+    enabledByDefault: false,
+    category: "writer",
+  },
+  {
+    id: "prompt-reviewer",
+    name: "Prompt Reviewer",
+    description:
+      "Analyses your prompt preset for clarity, redundancy, and formatting issues, and suggests improvements.",
+    phase: "pre_generation",
+    enabledByDefault: false,
+    category: "writer",
+  },
+
+  // ── Tracker Agents ──
+  {
+    id: "world-state",
+    name: "World State",
+    description: "Tracks date/time, weather, location, and present characters automatically.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    defaultInjectAsSection: true,
+    category: "tracker",
+  },
+  {
+    id: "expression",
+    name: "Expression Engine",
+    description: "Detects character emotions and selects VN sprites/expressions.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    category: "tracker",
+  },
+  {
+    id: "quest",
+    name: "Quest Tracker",
+    description: "Manages quest objectives, completion states, and rewards.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    defaultInjectAsSection: true,
+    category: "tracker",
+  },
+  {
+    id: "background",
+    name: "Background",
+    description: "Selects the most fitting background image for the current scene from your uploaded backgrounds.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    category: "tracker",
+  },
+  {
+    id: "character-tracker",
+    name: "Character Tracker",
+    description:
+      "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, MP, etc.).",
+    phase: "post_processing",
+    enabledByDefault: false,
+    defaultInjectAsSection: true,
+    category: "tracker",
+  },
+  {
+    id: "persona-stats",
+    name: "Persona Stats",
+    description:
+      "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    defaultInjectAsSection: true,
+    category: "tracker",
+  },
+
+  // ── Misc Agents ──
+  {
+    id: "illustrator",
+    name: "Illustrator",
+    description: "Generates image prompts for key scenes (requires image generation API).",
+    phase: "parallel",
+    enabledByDefault: false,
+    category: "misc",
+  },
+  {
+    id: "lorebook-keeper",
+    name: "Lorebook Keeper",
+    description:
+      "Automatically creates and updates lorebook entries based on story events, new characters, and world changes.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    category: "misc",
+  },
+  {
+    id: "combat",
+    name: "Combat",
+    description: "Manages combat encounters, initiative, HP tracking, and turn-based actions.",
+    phase: "parallel",
+    enabledByDefault: false,
+    category: "misc",
+  },
+  {
+    id: "html",
+    name: "Immersive HTML",
+    description:
+      "Injects a prompt directive that encourages the model to include inline HTML, CSS, and JS for immersive in-world visual elements.",
+    phase: "pre_generation",
+    enabledByDefault: false,
+    category: "misc",
+  },
+  {
+    id: "chat-summary",
+    name: "Chat Summary",
+    description:
+      "Generates a rolling summary of the conversation so far, capturing key events, character developments, and plot points.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    category: "misc",
+  },
+  {
+    id: "spotify",
+    name: "Spotify DJ",
+    description:
+      "Analyzes the narrative mood and controls Spotify playback — searching tracks, adjusting volume, and cueing music to match the scene. Requires a Spotify Premium account and API credentials.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    category: "misc",
+  },
+  {
+    id: "editor",
+    name: "Consistency Editor",
+    description:
+      "Reads all agent data (tracker states, prose rules, continuity notes) and edits the model's response to fix factual errors, outfit/stat contradictions, repetition, and other inconsistencies.",
+    phase: "post_processing",
+    enabledByDefault: false,
+    category: "writer",
+  },
 ];
+
+/** Recommended default tools for each built-in agent type. */
+export const DEFAULT_AGENT_TOOLS: Record<string, string[]> = {
+  "world-state": ["update_game_state"],
+  "prose-guardian": [],
+  continuity: ["search_lorebook"],
+  expression: ["set_expression"],
+  "echo-chamber": [],
+  director: ["trigger_event"],
+  quest: ["update_game_state"],
+  illustrator: [],
+  "lorebook-keeper": ["search_lorebook"],
+  "prompt-reviewer": [],
+  combat: ["roll_dice", "update_game_state"],
+  background: [],
+  "character-tracker": ["update_game_state"],
+  "persona-stats": ["update_game_state"],
+  html: [],
+  "chat-summary": [],
+  spotify: [
+    "spotify_get_playlists",
+    "spotify_get_playlist_tracks",
+    "spotify_search",
+    "spotify_play",
+    "spotify_set_volume",
+  ],
+  editor: [],
+};
 
 /** Data shape for a lorebook_update agent result. */
 export interface LorebookUpdateResult {
@@ -223,7 +426,8 @@ export interface AgentToolConfig {
 export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     name: "roll_dice",
-    description: "Roll dice using standard notation (e.g. 2d6, 1d20+5). Used for RPG mechanics, skill checks, and random outcomes.",
+    description:
+      "Roll dice using standard notation (e.g. 2d6, 1d20+5). Used for RPG mechanics, skill checks, and random outcomes.",
     parameters: {
       type: "object",
       properties: {
@@ -273,7 +477,17 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         eventType: {
           type: "string",
           description: "Type of event",
-          enum: ["npc_entrance", "npc_exit", "quest_start", "quest_complete", "scene_change", "combat_start", "combat_end", "revelation", "custom"],
+          enum: [
+            "npc_entrance",
+            "npc_exit",
+            "quest_start",
+            "quest_complete",
+            "scene_change",
+            "combat_start",
+            "combat_end",
+            "revelation",
+            "custom",
+          ],
         },
         description: { type: "string", description: "What happens in this event" },
         involvedCharacters: { type: "array", items: { type: "string" }, description: "Names of characters involved" },
@@ -291,6 +505,81 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         category: { type: "string", description: "Optional category filter" },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "spotify_get_playlists",
+    description:
+      "Get the user's Spotify playlists and saved library. Returns playlist names and URIs. Use this FIRST to see what the user already has before searching.",
+    parameters: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Number of playlists to return (default: 20, max: 50)" },
+      },
+    },
+  },
+  {
+    name: "spotify_get_playlist_tracks",
+    description:
+      "Get tracks from a specific playlist or the user's Liked Songs. Returns track names, artists, and URIs.",
+    parameters: {
+      type: "object",
+      properties: {
+        playlistId: {
+          type: "string",
+          description: "Playlist ID (from spotify_get_playlists), or 'liked' for the user's Liked Songs",
+        },
+        limit: { type: "number", description: "Number of tracks to return (default: 30, max: 50)" },
+        offset: { type: "number", description: "Offset for pagination (default: 0)" },
+      },
+      required: ["playlistId"],
+    },
+  },
+  {
+    name: "spotify_search",
+    description:
+      "Search Spotify for tracks matching a mood, genre, or specific query. Returns a list of track URIs. Prefer using the user's playlists/liked songs first.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Search query — mood keywords, genre, artist, or track name (e.g. 'dark ambient orchestral', 'battle music epic')",
+        },
+        limit: { type: "number", description: "Number of results to return (default: 5)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "spotify_play",
+    description: "Play a track or playlist on the user's active Spotify device.",
+    parameters: {
+      type: "object",
+      properties: {
+        uri: {
+          type: "string",
+          description: "Spotify URI to play (e.g. 'spotify:track:xxx' or 'spotify:playlist:xxx')",
+        },
+        reason: { type: "string", description: "Why this track fits the current scene mood" },
+      },
+      required: ["uri"],
+    },
+  },
+  {
+    name: "spotify_set_volume",
+    description: "Set the playback volume on the user's active Spotify device (0-100).",
+    parameters: {
+      type: "object",
+      properties: {
+        volume: { type: "number", description: "Volume level (0-100)" },
+        reason: {
+          type: "string",
+          description: "Why the volume is being adjusted (e.g. 'quiet scene', 'intense battle')",
+        },
+      },
+      required: ["volume"],
     },
   },
 ];

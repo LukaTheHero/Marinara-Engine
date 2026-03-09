@@ -23,26 +23,15 @@ export const CHAT_MODES: Record<ChatMode, ChatModeDefinition> = {
   roleplay: {
     id: "roleplay",
     name: "Roleplay",
-    description:
-      "Immersive roleplay with characters, game state tracking, and world simulation.",
+    description: "Immersive roleplay with characters, game state tracking, and world simulation.",
     icon: "🎭",
-    defaultAgents: [
-      "world-state",
-      "prose-guardian",
-      "continuity",
-      "expression",
-    ],
+    defaultAgents: ["world-state", "prose-guardian", "continuity", "expression"],
   },
   visual_novel: {
     id: "visual_novel",
     name: "Visual Novel",
-    description:
-      "Visual novel experience with backgrounds, sprites, text boxes, and choices.",
+    description: "Visual novel experience with backgrounds, sprites, text boxes, and choices.",
     icon: "🎮",
-    defaultAgents: [
-      "world-state",
-      "prose-guardian",
-      "expression",
-    ],
+    defaultAgents: ["world-state", "prose-guardian", "expression"],
   },
 };

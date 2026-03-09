@@ -1,22 +1,36 @@
 // ──────────────────────────────────────────────
 // Sprite Overlay — VN-style character sprites in chat
 // Shows character sprites on the left/right of the roleplay view.
-// Expression is determined by the last assistant message's detected emotion
-// or can be manually set via the Expression Engine agent.
+// Expression is determined by the Expression Engine agent result
+// or falls back to keyword-based detection from message text.
 // ──────────────────────────────────────────────
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { motion, AnimatePresence, type TargetAndTransition } from "framer-motion";
 import { useCharacterSprites, type SpriteInfo } from "../../hooks/use-characters";
-import { cn } from "../../lib/utils";
+import { useAgentStore } from "../../stores/agent.store";
 
 interface SpriteOverlayProps {
   /** IDs of characters in this chat */
   characterIds: string[];
   /** The last N messages to detect expressions from */
   messages: Array<{ role: string; characterId?: string | null; content: string }>;
+  /** Which side the sprites appear on */
+  side: "left" | "right";
+  /** Saved expressions per character (from chat metadata) */
+  spriteExpressions?: Record<string, string>;
+  /** Called when expression changes (to persist it) */
+  onExpressionChange?: (characterId: string, expression: string) => void;
+}
+
+type Transition = "crossfade" | "bounce" | "shake" | "hop" | "none";
+
+interface CharacterExpressionState {
+  expression: string;
+  transition: Transition;
 }
 
 /** Simple keyword-based expression detection from message text. */
-function detectExpression(text: string): string {
+export function detectExpression(text: string): string {
   const lower = text.toLowerCase();
   const patterns: [string, RegExp][] = [
     ["angry", /\b(anger|angry|furious|rage|yells?|shouts?|snarls?|growls?|seeth)/i],
@@ -42,130 +56,201 @@ function detectExpression(text: string): string {
   return "neutral";
 }
 
-/** Position mapping for multiple characters */
-const POSITIONS: Record<number, string[]> = {
-  1: ["center"],
-  2: ["left", "right"],
-  3: ["left", "center", "right"],
-};
+export function SpriteOverlay({
+  characterIds,
+  messages,
+  side,
+  spriteExpressions,
+  onExpressionChange,
+}: SpriteOverlayProps) {
+  // Subscribe to agent expression results
+  const expressionResult = useAgentStore((s) => s.lastResults.get("expression"));
 
-export function SpriteOverlay({ characterIds, messages }: SpriteOverlayProps) {
-  // Track current expression per character
-  const [expressions, setExpressions] = useState<Record<string, string>>({});
+  // Track current expression + transition per character
+  const [states, setStates] = useState<Record<string, CharacterExpressionState>>(() => {
+    const initial: Record<string, CharacterExpressionState> = {};
+    if (spriteExpressions) {
+      for (const [id, expr] of Object.entries(spriteExpressions)) {
+        initial[id] = { expression: expr, transition: "none" };
+      }
+    }
+    return initial;
+  });
 
-  // Detect expressions from most recent messages (for each character)
+  // When agent result arrives, prefer it over keyword detection
+  useEffect(() => {
+    if (expressionResult?.success && expressionResult.data) {
+      const data = expressionResult.data as {
+        expressions?: Array<{ characterId: string; expression: string; transition?: string }>;
+      };
+      if (data.expressions?.length) {
+        setStates((prev) => {
+          const next = { ...prev };
+          for (const e of data.expressions!) {
+            const t = (["crossfade", "bounce", "shake", "hop", "none"] as Transition[]).includes(
+              e.transition as Transition,
+            )
+              ? (e.transition as Transition)
+              : "crossfade";
+            next[e.characterId] = { expression: e.expression, transition: t };
+            onExpressionChange?.(e.characterId, e.expression);
+          }
+          return next;
+        });
+        return;
+      }
+    }
+  }, [expressionResult, onExpressionChange]);
+
+  // Fallback: keyword-based detection when no agent result
   useEffect(() => {
     if (!messages?.length) return;
-    const newExpressions: Record<string, string> = {};
+    if (expressionResult?.success && (expressionResult.data as any)?.expressions?.length) return;
 
-    // Look at last few assistant messages to detect expressions
-    const recentAssistant = messages
-      .filter((m) => m.role === "assistant")
-      .slice(-5);
+    const newStates: Record<string, CharacterExpressionState> = {};
 
+    const recentAssistant = messages.filter((m) => m.role === "assistant").slice(-5);
     for (const msg of recentAssistant) {
       if (msg.characterId) {
-        newExpressions[msg.characterId] = detectExpression(msg.content);
+        const expr = detectExpression(msg.content);
+        newStates[msg.characterId] = { expression: expr, transition: "crossfade" };
+        onExpressionChange?.(msg.characterId, expr);
       }
     }
 
-    // For characters without recent messages, check if we have character ids
     for (const id of characterIds) {
-      if (!newExpressions[id]) {
-        // Find the latest message from this character
-        const lastMsg = [...messages].reverse().find(
-          (m) => m.characterId === id && m.role === "assistant"
-        );
-        if (lastMsg) {
-          newExpressions[id] = detectExpression(lastMsg.content);
+      if (!newStates[id]) {
+        const saved = spriteExpressions?.[id];
+        if (saved) {
+          newStates[id] = { expression: saved, transition: "none" };
         } else {
-          newExpressions[id] = "neutral";
+          const lastMsg = [...messages].reverse().find((m) => m.characterId === id && m.role === "assistant");
+          const expr = lastMsg ? detectExpression(lastMsg.content) : "neutral";
+          newStates[id] = { expression: expr, transition: "crossfade" };
         }
       }
     }
 
-    setExpressions(newExpressions);
-  }, [messages, characterIds]);
+    setStates(newStates);
+  }, [messages, characterIds, expressionResult, spriteExpressions, onExpressionChange]);
 
   if (characterIds.length === 0) return null;
 
-  // Only show first 3 characters max
   const visibleChars = characterIds.slice(0, 3);
-  const positions = POSITIONS[Math.min(visibleChars.length, 3)] ?? POSITIONS[3]!;
 
   return (
-    <div className="rpg-sprite-container pointer-events-none absolute inset-0 z-10 overflow-hidden">
-      {visibleChars.map((charId, i) => (
+    <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden">
+      {visibleChars.map((charId) => (
         <CharacterSprite
           key={charId}
           characterId={charId}
-          expression={expressions[charId] ?? "neutral"}
-          position={positions[i] ?? "center"}
+          expression={states[charId]?.expression ?? "neutral"}
+          transition={states[charId]?.transition ?? "crossfade"}
+          side={side}
         />
       ))}
     </div>
   );
 }
 
+// ── Transition animation variants ──────────────────────────
+
+interface SpriteVariant {
+  initial: TargetAndTransition;
+  animate: TargetAndTransition;
+  exit: TargetAndTransition;
+}
+
+const CROSSFADE: SpriteVariant = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.4, ease: "easeInOut" } },
+  exit: { opacity: 0, transition: { duration: 0.3 } },
+};
+
+const BOUNCE: SpriteVariant = {
+  initial: { opacity: 0, scale: 0.85 },
+  animate: { opacity: 1, scale: [0.85, 1.08, 0.97, 1], transition: { duration: 0.5, times: [0, 0.4, 0.7, 1] } },
+  exit: { opacity: 0, scale: 0.9, transition: { duration: 0.25 } },
+};
+
+const SHAKE: SpriteVariant = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, x: [0, -6, 6, -4, 4, -2, 2, 0], transition: { duration: 0.45, ease: "easeOut" } },
+  exit: { opacity: 0, transition: { duration: 0.2 } },
+};
+
+const HOP: SpriteVariant = {
+  initial: { opacity: 0, y: 0 },
+  animate: { opacity: 1, y: [0, -18, 0, -8, 0], transition: { duration: 0.5, times: [0, 0.3, 0.55, 0.75, 1] } },
+  exit: { opacity: 0, transition: { duration: 0.2 } },
+};
+
+const NONE_VARIANT: SpriteVariant = {
+  initial: { opacity: 1 },
+  animate: { opacity: 1, transition: { duration: 0 } },
+  exit: { opacity: 0, transition: { duration: 0 } },
+};
+
+const TRANSITION_VARIANTS: Record<Transition, SpriteVariant> = {
+  crossfade: CROSSFADE,
+  bounce: BOUNCE,
+  shake: SHAKE,
+  hop: HOP,
+  none: NONE_VARIANT,
+};
+
+// ── Character Sprite ───────────────────────────────────────
+
 function CharacterSprite({
   characterId,
   expression,
-  position,
+  transition,
+  side,
 }: {
   characterId: string;
   expression: string;
-  position: string;
+  transition: Transition;
+  side: "left" | "right";
 }) {
   const { data: sprites } = useCharacterSprites(characterId);
-  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const prevExpressionRef = useRef(expression);
+  const [activeTransition, setActiveTransition] = useState<Transition>(transition);
 
-  // Find the best matching sprite for the current expression
   const spriteUrl = useMemo(() => {
     if (!sprites || !(sprites as SpriteInfo[]).length) return null;
     const spriteList = sprites as SpriteInfo[];
-
-    // Exact match
     const exact = spriteList.find((s) => s.expression === expression);
     if (exact) return exact.url;
-
-    // Fall back to neutral
     const neutral = spriteList.find((s) => s.expression === "neutral" || s.expression === "default");
     if (neutral) return neutral.url;
-
-    // Just use the first available
     return spriteList[0]?.url ?? null;
   }, [sprites, expression]);
 
-  // Animate in/out when sprite changes
   useEffect(() => {
-    if (spriteUrl) {
-      setCurrentUrl(spriteUrl);
-      // Small delay before showing for smooth transition
-      requestAnimationFrame(() => setIsVisible(true));
-    } else {
-      setIsVisible(false);
+    if (prevExpressionRef.current !== expression) {
+      setActiveTransition(transition);
+      prevExpressionRef.current = expression;
     }
-  }, [spriteUrl]);
+  }, [expression, transition]);
 
-  if (!currentUrl) return null;
+  if (!spriteUrl) return null;
+
+  const variant = TRANSITION_VARIANTS[activeTransition];
 
   return (
-    <div
-      className={cn(
-        "rpg-sprite-character absolute bottom-0 transition-all duration-500 ease-out",
-        position === "left" && "rpg-sprite-left",
-        position === "right" && "rpg-sprite-right",
-        position === "center" && "rpg-sprite-center",
-        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4",
-      )}
-    >
-      <img
-        src={currentUrl}
-        alt={`${expression} sprite`}
-        className="max-h-[60vh] w-auto object-contain drop-shadow-[0_0_20px_rgba(0,0,0,0.5)]"
-        draggable={false}
-      />
+    <div className={`absolute bottom-0 ${side === "left" ? "left-0" : "right-0"}`}>
+      <AnimatePresence mode="wait">
+        <motion.img
+          key={`${characterId}-${expression}`}
+          src={spriteUrl}
+          alt={`${expression} sprite`}
+          className="max-h-[60vh] w-auto object-contain drop-shadow-[0_0_20px_rgba(0,0,0,0.5)]"
+          draggable={false}
+          initial={variant.initial}
+          animate={variant.animate}
+          exit={variant.exit}
+        />
+      </AnimatePresence>
     </div>
   );
 }

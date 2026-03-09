@@ -21,6 +21,7 @@ export function useLorebooks(category?: string) {
   return useQuery({
     queryKey: category ? lorebookKeys.byCategory(category) : lorebookKeys.list(),
     queryFn: () => api.get<Lorebook[]>(category ? `/lorebooks?category=${category}` : "/lorebooks"),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -29,6 +30,7 @@ export function useLorebook(id: string | null) {
     queryKey: lorebookKeys.detail(id ?? ""),
     queryFn: () => api.get<Lorebook>(`/lorebooks/${id}`),
     enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -96,11 +98,7 @@ export function useCreateLorebookEntry() {
 export function useUpdateLorebookEntry() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      lorebookId,
-      entryId,
-      ...data
-    }: { lorebookId: string; entryId: string } & Record<string, unknown>) =>
+    mutationFn: ({ lorebookId, entryId, ...data }: { lorebookId: string; entryId: string } & Record<string, unknown>) =>
       api.patch<LorebookEntry>(`/lorebooks/${lorebookId}/entries/${entryId}`, data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: lorebookKeys.entries(variables.lorebookId) });

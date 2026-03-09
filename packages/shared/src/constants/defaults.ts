@@ -14,20 +14,24 @@ export const DEFAULT_GENERATION_PARAMS: GenerationParameters = {
   frequencyPenalty: 0,
   presencePenalty: 0,
   reasoningEffort: null,
+  verbosity: null,
   squashSystemMessages: true,
   showThoughts: true,
+  useMaxContext: false,
   stopSequences: [],
+  strictRoleFormatting: true,
+  singleUserMessage: false,
 };
 
 /** Maximum file sizes for uploads. */
 export const MAX_FILE_SIZES = {
-  AVATAR: 10 * 1024 * 1024,       // 10 MB
-  BACKGROUND: 20 * 1024 * 1024,   // 20 MB
-  SPRITE: 10 * 1024 * 1024,       // 10 MB
+  AVATAR: 10 * 1024 * 1024, // 10 MB
+  BACKGROUND: 20 * 1024 * 1024, // 20 MB
+  SPRITE: 10 * 1024 * 1024, // 10 MB
   CHARACTER_JSON: 5 * 1024 * 1024, // 5 MB
   LOREBOOK_JSON: 10 * 1024 * 1024, // 10 MB
-  PRESET_JSON: 2 * 1024 * 1024,    // 2 MB
-  CHAT_JSONL: 50 * 1024 * 1024,    // 50 MB
+  PRESET_JSON: 2 * 1024 * 1024, // 2 MB
+  CHAT_JSONL: 50 * 1024 * 1024, // 50 MB
 } as const;
 
 /** Limits for various entities. */
@@ -40,6 +44,6 @@ export const LIMITS = {
   SUMMARY_INTERVAL: 50,
   /** Default vectorization: top-K results */
   VECTOR_TOP_K: 10,
-  /** EchoChamber: messages per generation */
+  /** Echo Chamber: messages per generation */
   ECHO_CHAMBER_MESSAGES: 5,
 } as const;

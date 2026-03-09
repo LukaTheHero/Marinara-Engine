@@ -15,6 +15,7 @@ export function useConnections() {
   return useQuery({
     queryKey: connectionKeys.list(),
     queryFn: () => api.get<unknown[]>("/connections"),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -23,19 +24,15 @@ export function useConnection(id: string | null) {
     queryKey: connectionKeys.detail(id ?? ""),
     queryFn: () => api.get<Record<string, unknown>>(`/connections/${id}`),
     enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }
 
 export function useCreateConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {
-      name: string;
-      provider: string;
-      apiKey: string;
-      baseUrl?: string;
-      model?: string;
-    }) => api.post("/connections", data),
+    mutationFn: (data: { name: string; provider: string; apiKey: string; baseUrl?: string; model?: string }) =>
+      api.post("/connections", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: connectionKeys.list() }),
   });
 }
@@ -43,8 +40,7 @@ export function useCreateConnection() {
 export function useUpdateConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
-      api.patch(`/connections/${id}`, data),
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => api.patch(`/connections/${id}`, data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: connectionKeys.list() });
       qc.invalidateQueries({ queryKey: connectionKeys.detail(variables.id) });
@@ -68,6 +64,13 @@ export function useTestConnection() {
 
 export function useTestMessage() {
   return useMutation({
-    mutationFn: (id: string) => api.post<{ success: boolean; response: string; latencyMs: number }>(`/connections/${id}/test-message`),
+    mutationFn: (id: string) =>
+      api.post<{ success: boolean; response: string; latencyMs: number }>(`/connections/${id}/test-message`),
+  });
+}
+
+export function useFetchModels() {
+  return useMutation({
+    mutationFn: (id: string) => api.get<{ models: Array<{ id: string; name: string }> }>(`/connections/${id}/models`),
   });
 }

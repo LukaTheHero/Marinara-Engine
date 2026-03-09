@@ -56,7 +56,7 @@ export async function agentsRoutes(app: FastifyInstance) {
       enabled: !builtIn.enabledByDefault,
       connectionId: null,
       promptTemplate: "",
-      settings: {},
+      settings: builtIn.defaultInjectAsSection ? { injectAsSection: true } : {},
     });
   });
 }

@@ -7,16 +7,18 @@ export const promptRoleSchema = z.enum(["system", "user", "assistant"]);
 
 export const injectionPositionSchema = z.enum(["ordered", "depth"]);
 
-export const wrapFormatSchema = z.enum(["xml", "markdown"]);
+export const wrapFormatSchema = z.enum(["xml", "markdown", "none"]);
 
 export const markerTypeSchema = z.enum([
   "character",
   "lorebook",
   "persona",
   "chat_history",
+  "chat_summary",
   "world_info_before",
   "world_info_after",
   "dialogue_examples",
+  "agent_data",
 ]);
 
 export const markerConfigSchema = z.object({
@@ -29,6 +31,7 @@ export const markerConfigSchema = z.object({
       includeSystemMessages: z.boolean().optional(),
     })
     .optional(),
+  agentType: z.string().optional(),
 });
 
 export const generationParametersSchema = z.object({
@@ -40,10 +43,14 @@ export const generationParametersSchema = z.object({
   maxContext: z.number().int().min(1).default(128000),
   frequencyPenalty: z.number().min(-2).max(2).default(0),
   presencePenalty: z.number().min(-2).max(2).default(0),
-  reasoningEffort: z.enum(["low", "medium", "high"]).nullable().default(null),
+  reasoningEffort: z.enum(["low", "medium", "high", "maximum"]).nullable().default(null),
+  verbosity: z.enum(["low", "medium", "high"]).nullable().default(null),
   squashSystemMessages: z.boolean().default(true),
   showThoughts: z.boolean().default(true),
+  useMaxContext: z.boolean().default(false),
   stopSequences: z.array(z.string()).default([]),
+  strictRoleFormatting: z.boolean().default(true),
+  singleUserMessage: z.boolean().default(false),
 });
 
 export const promptVariableOptionSchema = z.object({
@@ -57,23 +64,36 @@ export const promptVariableGroupSchema = z.object({
   options: z.array(promptVariableOptionSchema),
 });
 
-// ── Choice blocks ──
+// ── Choice blocks (preset variables) ──
 
 export const choiceOptionSchema = z.object({
   id: z.string(),
   label: z.string(),
-  content: z.string(),
+  value: z.string(),
 });
 
 export const createChoiceBlockSchema = z.object({
-  sectionId: z.string(),
-  label: z.string().min(1).max(200),
+  presetId: z.string(),
+  variableName: z.string().min(1).max(100).regex(/^\w+$/, "Variable name must be alphanumeric/underscores only"),
+  question: z.string().min(1).max(500),
   options: z.array(choiceOptionSchema).min(2),
+  multiSelect: z.boolean().default(false),
+  separator: z.string().max(20).default(", "),
+  randomPick: z.boolean().default(false),
 });
 
 export const updateChoiceBlockSchema = z.object({
-  label: z.string().min(1).max(200).optional(),
+  variableName: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^\w+$/, "Variable name must be alphanumeric/underscores only")
+    .optional(),
+  question: z.string().min(1).max(500).optional(),
   options: z.array(choiceOptionSchema).min(2).optional(),
+  multiSelect: z.boolean().optional(),
+  separator: z.string().max(20).optional(),
+  randomPick: z.boolean().optional(),
 });
 
 // ── Groups ──
@@ -116,6 +136,7 @@ export const updatePromptPresetSchema = z.object({
   parameters: generationParametersSchema.partial().optional(),
   wrapFormat: wrapFormatSchema.optional(),
   author: z.string().optional(),
+  defaultChoices: z.record(z.union([z.string(), z.array(z.string())])).optional(),
 });
 
 // ── Sections ──

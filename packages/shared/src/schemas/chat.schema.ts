@@ -29,6 +29,7 @@ export const generateRequestSchema = z.object({
   userMessage: z.string().nullable().default(null),
   regenerateMessageId: z.string().nullable().default(null),
   connectionId: z.string().nullable().default(null),
+  debugMode: z.boolean().optional().default(false),
 });
 
 export type CreateChatInput = z.infer<typeof createChatSchema>;

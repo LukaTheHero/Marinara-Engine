@@ -25,6 +25,10 @@ export function ImportLorebookModal({ open, onClose }: Props) {
       const text = await file.text();
       const json = JSON.parse(text);
 
+      // Pass the filename (without extension) as a fallback name
+      const fallbackName = file.name.replace(/\.json$/i, "");
+      json.__filename = fallbackName;
+
       const res = await fetch("/api/import/st-lorebook", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -52,18 +56,33 @@ export function ImportLorebookModal({ open, onClose }: Props) {
     if (file) handleFile(file);
   };
 
-  const reset = () => { setStatus("idle"); setMessage(""); };
+  const reset = () => {
+    setStatus("idle");
+    setMessage("");
+  };
 
   return (
-    <Modal open={open} onClose={() => { reset(); onClose(); }} title="Import Lorebook">
+    <Modal
+      open={open}
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      title="Import Lorebook"
+    >
       <div className="flex flex-col gap-4">
         <div
           onDrop={handleDrop}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
           onClick={() => fileRef.current?.click()}
           className={`flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed p-8 transition-all ${
-            dragOver ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] hover:border-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50"
+            dragOver
+              ? "border-[var(--primary)] bg-[var(--primary)]/10"
+              : "border-[var(--border)] hover:border-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50"
           }`}
         >
           <Upload size={32} className={dragOver ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"} />
@@ -78,7 +97,11 @@ export function ImportLorebookModal({ open, onClose }: Props) {
           type="file"
           accept=".json"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.target.value = "";
+          }}
         />
 
         {status === "loading" && (
@@ -98,7 +121,13 @@ export function ImportLorebookModal({ open, onClose }: Props) {
         )}
 
         <div className="flex justify-end border-t border-[var(--border)] pt-3">
-          <button onClick={() => { reset(); onClose(); }} className="rounded-lg px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]">
+          <button
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+            className="rounded-lg px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]"
+          >
             Close
           </button>
         </div>

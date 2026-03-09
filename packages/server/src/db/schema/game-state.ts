@@ -22,6 +22,11 @@ export const gameStateSnapshots = sqliteTable("game_state_snapshots", {
   recentEvents: text("recent_events").notNull().default("[]"),
   /** JSON object for player stats */
   playerStats: text("player_stats"),
+  /** JSON array of persona stat bars */
+  personaStats: text("persona_stats"),
+
+  /** Whether this snapshot has been "committed" (user sent a follow-up message). */
+  committed: integer("committed").notNull().default(0),
 
   createdAt: text("created_at").notNull(),
 });

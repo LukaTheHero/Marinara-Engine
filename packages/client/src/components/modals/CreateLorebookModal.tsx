@@ -17,8 +17,7 @@ export function CreateLorebookModal({ open, onClose }: Props) {
   const [form, setForm] = useState({ name: "", description: "" });
 
   const createLorebook = useMutation({
-    mutationFn: (data: { name: string; description: string }) =>
-      api.post("/lorebooks", { ...data, entries: [] }),
+    mutationFn: (data: { name: string; description: string }) => api.post("/lorebooks", { ...data, entries: [] }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lorebooks"] });
       onClose();

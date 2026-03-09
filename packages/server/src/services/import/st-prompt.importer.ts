@@ -66,20 +66,21 @@ export async function importSTPreset(raw: Record<string, unknown>, db: DB, fileN
       frequencyPenalty: preset.frequency_penalty ?? 0,
       presencePenalty: preset.presence_penalty ?? 0,
       reasoningEffort: (preset.reasoning_effort as "low" | "medium" | "high") ?? null,
+      verbosity: null,
       squashSystemMessages: preset.squash_system_messages ?? true,
       showThoughts: preset.show_thoughts ?? true,
+      useMaxContext: false,
       stopSequences: [],
+      strictRoleFormatting: true,
+      singleUserMessage: false,
     },
   });
 
   if (!created) return { error: "Failed to create preset" };
 
   // Determine the section order from prompt_order (prefer the custom 100001 ordering)
-  const orderDef = preset.prompt_order?.find((o) => o.character_id === 100001)
-    ?? preset.prompt_order?.[0];
-  const orderMap = new Map(
-    orderDef?.order?.map((o, i) => [o.identifier, { index: i, enabled: o.enabled }]) ?? [],
-  );
+  const orderDef = preset.prompt_order?.find((o) => o.character_id === 100001) ?? preset.prompt_order?.[0];
+  const orderMap = new Map(orderDef?.order?.map((o, i) => [o.identifier, { index: i, enabled: o.enabled }]) ?? []);
 
   // Import each prompt entry as a section
   const prompts = preset.prompts ?? [];
@@ -91,7 +92,7 @@ export async function importSTPreset(raw: Record<string, unknown>, db: DB, fileN
   for (const entry of prompts) {
     // Skip bracket entries that are just XML open/close tags (now handled by groups)
     const isBracket = /^[┌└┎┖⌈⌊⌜⌞]/.test(entry.name);
-    if (isBracket && !(entry.content?.trim())) continue;
+    if (isBracket && !entry.content?.trim()) continue;
 
     // Map ST role to our role
     let role: "system" | "user" | "assistant" = "system";
@@ -99,7 +100,7 @@ export async function importSTPreset(raw: Record<string, unknown>, db: DB, fileN
     if (entry.role === "assistant") role = "assistant";
 
     // Determine injection position
-    const injectionPosition = (entry.injection_position === 1) ? "depth" as const : "ordered" as const;
+    const injectionPosition = entry.injection_position === 1 ? ("depth" as const) : ("ordered" as const);
 
     // Check override from prompt_order
     const orderInfo = orderMap.get(entry.identifier);

@@ -5,9 +5,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 type Panel = "chat" | "characters" | "lorebooks" | "presets" | "connections" | "agents" | "personas" | "settings";
-type ChatModeOption = "conversation" | "roleplay";
 type FontSize = 12 | 14 | 16 | 17;
 export type VisualTheme = "default" | "sillytavern";
+export type HudPosition = "top" | "left" | "right";
+export type EchoChamberSide = "left" | "right";
 
 /** A user-installed custom theme */
 export interface CustomTheme {
@@ -58,21 +59,31 @@ interface UIState {
   regexDetailId: string | null;
 
   // ── Settings (persisted) ──
-  defaultUserName: string;
-  defaultChatMode: ChatModeOption;
   fontSize: FontSize;
+  /** Font size for chat messages (px) */
+  chatFontSize: number;
   enableStreaming: boolean;
-  autoSaveChats: boolean;
+  /** Streaming render rate: 30 or 60 FPS */
+  streamingFps: 30 | 60;
   debugMode: boolean;
   messageGrouping: boolean;
   showTimestamps: boolean;
+  showModelName: boolean;
   confirmBeforeDelete: boolean;
+  /** Number of messages to load per page (0 = load all) */
+  messagesPerPage: number;
 
   // ── Visual Theme ──
   visualTheme: VisualTheme;
 
+  // ── Input ──
+  enterToSend: boolean;
+
   // ── Roleplay Effects ──
   weatherEffects: boolean;
+
+  // ── HUD Layout ──
+  hudPosition: HudPosition;
 
   // ── Custom Themes & Extensions ──
   /** Currently active custom theme id (null = built-in default) */
@@ -82,6 +93,13 @@ interface UIState {
 
   // ── Onboarding ──
   hasCompletedOnboarding: boolean;
+
+  // ── Dismissals ──
+  linkApiBannerDismissed: boolean;
+
+  // ── EchoChamber ──
+  echoChamberOpen: boolean;
+  echoChamberSide: EchoChamberSide;
 
   // Actions
   toggleSidebar: () => void;
@@ -118,17 +136,20 @@ interface UIState {
   closeAllDetails: () => void;
 
   // Settings actions
-  setDefaultUserName: (name: string) => void;
-  setDefaultChatMode: (mode: ChatModeOption) => void;
   setFontSize: (size: FontSize) => void;
+  setChatFontSize: (size: number) => void;
   setEnableStreaming: (v: boolean) => void;
-  setAutoSaveChats: (v: boolean) => void;
+  setStreamingFps: (v: 30 | 60) => void;
   setDebugMode: (v: boolean) => void;
   setMessageGrouping: (v: boolean) => void;
   setShowTimestamps: (v: boolean) => void;
+  setShowModelName: (v: boolean) => void;
   setConfirmBeforeDelete: (v: boolean) => void;
+  setMessagesPerPage: (n: number) => void;
   setVisualTheme: (v: VisualTheme) => void;
+  setEnterToSend: (v: boolean) => void;
   setWeatherEffects: (v: boolean) => void;
+  setHudPosition: (v: HudPosition) => void;
   setActiveCustomTheme: (id: string | null) => void;
   addCustomTheme: (theme: CustomTheme) => void;
   removeCustomTheme: (id: string) => void;
@@ -136,6 +157,9 @@ interface UIState {
   removeExtension: (id: string) => void;
   toggleExtension: (id: string) => void;
   setHasCompletedOnboarding: (v: boolean) => void;
+  dismissLinkApiBanner: () => void;
+  toggleEchoChamber: () => void;
+  setEchoChamberSide: (side: EchoChamberSide) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -159,21 +183,27 @@ export const useUIStore = create<UIState>()(
       regexDetailId: null,
 
       // Settings defaults
-      defaultUserName: "User",
-      defaultChatMode: "roleplay" as ChatModeOption,
       fontSize: 14 as FontSize,
+      chatFontSize: 16,
       enableStreaming: true,
-      autoSaveChats: true,
+      streamingFps: 60 as 30 | 60,
       debugMode: false,
       messageGrouping: true,
       showTimestamps: false,
+      showModelName: false,
       confirmBeforeDelete: true,
+      messagesPerPage: 20,
       visualTheme: "default" as VisualTheme,
+      enterToSend: true,
       weatherEffects: true,
+      hudPosition: "top" as HudPosition,
       activeCustomTheme: null,
       customThemes: [],
       installedExtensions: [],
       hasCompletedOnboarding: false,
+      linkApiBannerDismissed: false,
+      echoChamberOpen: false,
+      echoChamberSide: "right" as EchoChamberSide,
 
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -193,71 +223,159 @@ export const useUIStore = create<UIState>()(
       closeModal: () => set({ modal: null }),
       setTheme: (theme) => set({ theme }),
       setChatBackground: (url) => set({ chatBackground: url }),
-      openCharacterDetail: (id) => set({ characterDetailId: id, lorebookDetailId: null, presetDetailId: null, connectionDetailId: null, agentDetailId: null, personaDetailId: null, regexDetailId: null }),
+      openCharacterDetail: (id) =>
+        set({
+          characterDetailId: id,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+        }),
       closeCharacterDetail: () => set({ characterDetailId: null }),
-      openLorebookDetail: (id) => set({ lorebookDetailId: id, characterDetailId: null, presetDetailId: null, connectionDetailId: null, agentDetailId: null, personaDetailId: null, regexDetailId: null }),
+      openLorebookDetail: (id) =>
+        set({
+          lorebookDetailId: id,
+          characterDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+        }),
       closeLorebookDetail: () => set({ lorebookDetailId: null }),
-      openPresetDetail: (id) => set({ presetDetailId: id, characterDetailId: null, lorebookDetailId: null, connectionDetailId: null, agentDetailId: null, personaDetailId: null, regexDetailId: null }),
+      openPresetDetail: (id) =>
+        set({
+          presetDetailId: id,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+        }),
       closePresetDetail: () => set({ presetDetailId: null }),
-      openConnectionDetail: (id) => set({ connectionDetailId: id, characterDetailId: null, lorebookDetailId: null, presetDetailId: null, agentDetailId: null, personaDetailId: null, regexDetailId: null }),
+      openConnectionDetail: (id) =>
+        set({
+          connectionDetailId: id,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          agentDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+        }),
       closeConnectionDetail: () => set({ connectionDetailId: null }),
-      openAgentDetail: (agentType) => set({ agentDetailId: agentType, characterDetailId: null, lorebookDetailId: null, presetDetailId: null, connectionDetailId: null, toolDetailId: null, personaDetailId: null, regexDetailId: null }),
+      openAgentDetail: (agentType) =>
+        set({
+          agentDetailId: agentType,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          toolDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+        }),
       closeAgentDetail: () => set({ agentDetailId: null }),
-      openToolDetail: (id) => set({ toolDetailId: id, agentDetailId: null, characterDetailId: null, lorebookDetailId: null, presetDetailId: null, connectionDetailId: null, personaDetailId: null, regexDetailId: null }),
+      openToolDetail: (id) =>
+        set({
+          toolDetailId: id,
+          agentDetailId: null,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+        }),
       closeToolDetail: () => set({ toolDetailId: null }),
-      openPersonaDetail: (id) => set({ personaDetailId: id, characterDetailId: null, lorebookDetailId: null, presetDetailId: null, connectionDetailId: null, agentDetailId: null, toolDetailId: null, regexDetailId: null }),
+      openPersonaDetail: (id) =>
+        set({
+          personaDetailId: id,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          toolDetailId: null,
+          regexDetailId: null,
+        }),
       closePersonaDetail: () => set({ personaDetailId: null }),
-      openRegexDetail: (id) => set({ regexDetailId: id, personaDetailId: null, characterDetailId: null, lorebookDetailId: null, presetDetailId: null, connectionDetailId: null, agentDetailId: null, toolDetailId: null }),
+      openRegexDetail: (id) =>
+        set({
+          regexDetailId: id,
+          personaDetailId: null,
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          toolDetailId: null,
+        }),
       closeRegexDetail: () => set({ regexDetailId: null }),
 
       hasAnyDetailOpen: () => {
         const s = get();
-        return !!(s.characterDetailId || s.lorebookDetailId || s.presetDetailId || s.connectionDetailId || s.agentDetailId || s.toolDetailId || s.personaDetailId || s.regexDetailId);
+        return !!(
+          s.characterDetailId ||
+          s.lorebookDetailId ||
+          s.presetDetailId ||
+          s.connectionDetailId ||
+          s.agentDetailId ||
+          s.toolDetailId ||
+          s.personaDetailId ||
+          s.regexDetailId
+        );
       },
-      closeAllDetails: () => set({
-        characterDetailId: null,
-        lorebookDetailId: null,
-        presetDetailId: null,
-        connectionDetailId: null,
-        agentDetailId: null,
-        toolDetailId: null,
-        personaDetailId: null,
-        regexDetailId: null,
-      }),
+      closeAllDetails: () =>
+        set({
+          characterDetailId: null,
+          lorebookDetailId: null,
+          presetDetailId: null,
+          connectionDetailId: null,
+          agentDetailId: null,
+          toolDetailId: null,
+          personaDetailId: null,
+          regexDetailId: null,
+        }),
 
       // Settings actions
-      setDefaultUserName: (name) => set({ defaultUserName: name }),
-      setDefaultChatMode: (mode) => set({ defaultChatMode: mode }),
       setFontSize: (size) => set({ fontSize: size }),
+      setChatFontSize: (size) => set({ chatFontSize: size }),
       setEnableStreaming: (v) => set({ enableStreaming: v }),
-      setAutoSaveChats: (v) => set({ autoSaveChats: v }),
+      setStreamingFps: (v) => set({ streamingFps: v }),
       setDebugMode: (v) => set({ debugMode: v }),
       setMessageGrouping: (v) => set({ messageGrouping: v }),
       setShowTimestamps: (v) => set({ showTimestamps: v }),
+      setShowModelName: (v) => set({ showModelName: v }),
       setConfirmBeforeDelete: (v) => set({ confirmBeforeDelete: v }),
+      setMessagesPerPage: (n) => set({ messagesPerPage: n }),
       setVisualTheme: (v) => set({ visualTheme: v }),
+      setEnterToSend: (v) => set({ enterToSend: v }),
       setWeatherEffects: (v) => set({ weatherEffects: v }),
+      setHudPosition: (v) => set({ hudPosition: v }),
       setActiveCustomTheme: (id) => set({ activeCustomTheme: id }),
-      addCustomTheme: (theme) =>
-        set((s) => ({ customThemes: [...s.customThemes, theme] })),
+      addCustomTheme: (theme) => set((s) => ({ customThemes: [...s.customThemes, theme] })),
       removeCustomTheme: (id) =>
         set((s) => ({
           customThemes: s.customThemes.filter((t) => t.id !== id),
           activeCustomTheme: s.activeCustomTheme === id ? null : s.activeCustomTheme,
         })),
-      addExtension: (ext) =>
-        set((s) => ({ installedExtensions: [...s.installedExtensions, ext] })),
+      addExtension: (ext) => set((s) => ({ installedExtensions: [...s.installedExtensions, ext] })),
       removeExtension: (id) =>
         set((s) => ({
           installedExtensions: s.installedExtensions.filter((e) => e.id !== id),
         })),
       toggleExtension: (id) =>
         set((s) => ({
-          installedExtensions: s.installedExtensions.map((e) =>
-            e.id === id ? { ...e, enabled: !e.enabled } : e,
-          ),
+          installedExtensions: s.installedExtensions.map((e) => (e.id === id ? { ...e, enabled: !e.enabled } : e)),
         })),
       setHasCompletedOnboarding: (v) => set({ hasCompletedOnboarding: v }),
+      dismissLinkApiBanner: () => set({ linkApiBannerDismissed: true }),
+      toggleEchoChamber: () => set((s) => ({ echoChamberOpen: !s.echoChamberOpen })),
+      setEchoChamberSide: (side) => set({ echoChamberSide: side }),
     }),
     {
       name: "marinara-engine-ui",
@@ -266,21 +384,26 @@ export const useUIStore = create<UIState>()(
         sidebarWidth: state.sidebarWidth,
         theme: state.theme,
         chatBackground: state.chatBackground,
-        defaultUserName: state.defaultUserName,
-        defaultChatMode: state.defaultChatMode,
         fontSize: state.fontSize,
+        chatFontSize: state.chatFontSize,
         enableStreaming: state.enableStreaming,
-        autoSaveChats: state.autoSaveChats,
+        streamingFps: state.streamingFps,
         debugMode: state.debugMode,
         messageGrouping: state.messageGrouping,
         showTimestamps: state.showTimestamps,
+        showModelName: state.showModelName,
         confirmBeforeDelete: state.confirmBeforeDelete,
+        messagesPerPage: state.messagesPerPage,
         visualTheme: state.visualTheme,
+        enterToSend: state.enterToSend,
         weatherEffects: state.weatherEffects,
+        hudPosition: state.hudPosition,
         activeCustomTheme: state.activeCustomTheme,
         customThemes: state.customThemes,
         installedExtensions: state.installedExtensions,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
+        linkApiBannerDismissed: state.linkApiBannerDismissed,
+        echoChamberSide: state.echoChamberSide,
       }),
     },
   ),

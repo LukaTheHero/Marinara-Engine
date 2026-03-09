@@ -153,21 +153,13 @@ export function createLorebooksStorage(db: DB) {
 
     /** Get all enabled entries from all enabled lorebooks (for keyword scanning). */
     async listActiveEntries() {
-      const enabledBooks = await db
-        .select({ id: lorebooks.id })
-        .from(lorebooks)
-        .where(eq(lorebooks.enabled, "true"));
+      const enabledBooks = await db.select({ id: lorebooks.id }).from(lorebooks).where(eq(lorebooks.enabled, "true"));
       const bookIds = enabledBooks.map((b) => b.id);
       if (bookIds.length === 0) return [];
       const rows = await db
         .select()
         .from(lorebookEntries)
-        .where(
-          and(
-            inArray(lorebookEntries.lorebookId, bookIds),
-            eq(lorebookEntries.enabled, "true"),
-          ),
-        )
+        .where(and(inArray(lorebookEntries.lorebookId, bookIds), eq(lorebookEntries.enabled, "true")))
         .orderBy(lorebookEntries.order);
       return rows.map((r) => parseEntryRow(r as Record<string, unknown>));
     },
@@ -244,7 +236,8 @@ export function createLorebooksStorage(db: DB) {
       if (input.tag !== undefined) updates.tag = input.tag;
       if (input.relationships !== undefined) updates.relationships = JSON.stringify(input.relationships);
       if (input.dynamicState !== undefined) updates.dynamicState = JSON.stringify(input.dynamicState);
-      if (input.activationConditions !== undefined) updates.activationConditions = JSON.stringify(input.activationConditions);
+      if (input.activationConditions !== undefined)
+        updates.activationConditions = JSON.stringify(input.activationConditions);
       if (input.schedule !== undefined) updates.schedule = input.schedule ? JSON.stringify(input.schedule) : null;
 
       await db.update(lorebookEntries).set(updates).where(eq(lorebookEntries.id, id));
@@ -271,9 +264,7 @@ export function createLorebooksStorage(db: DB) {
       const rows = await db
         .select()
         .from(lorebookEntries)
-        .where(
-          like(lorebookEntries.name, pattern),
-        )
+        .where(like(lorebookEntries.name, pattern))
         .orderBy(lorebookEntries.order);
       return rows.map((r) => parseEntryRow(r as Record<string, unknown>));
     },

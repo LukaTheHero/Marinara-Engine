@@ -5,7 +5,16 @@
 //           Appearance, Scenario, Dialogue, Advanced, Lorebook
 // ──────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useCharacter, useUpdateCharacter, useUploadAvatar, useDeleteCharacter, useCharacterSprites, useUploadSprite, useDeleteSprite, type SpriteInfo } from "../../hooks/use-characters";
+import {
+  useCharacter,
+  useUpdateCharacter,
+  useUploadAvatar,
+  useDeleteCharacter,
+  useCharacterSprites,
+  useUploadSprite,
+  useDeleteSprite,
+  type SpriteInfo,
+} from "../../hooks/use-characters";
 import { useUIStore } from "../../stores/ui.store";
 import {
   ArrowLeft,
@@ -30,11 +39,16 @@ import {
   Upload,
   Plus,
   Palette,
+  Download,
+  FolderOpen,
+  Loader2,
+  Swords,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
+import { api } from "../../lib/api-client";
 import { ColorPicker } from "../ui/ColorPicker";
-import type { CharacterData } from "@rpg-engine/shared";
+import type { CharacterData, RPGStatsConfig } from "@rpg-engine/shared";
 
 // ── Tabs ──
 const TABS = [
@@ -47,6 +61,7 @@ const TABS = [
   { id: "dialogue", label: "Dialogue", icon: MessageCircle },
   { id: "sprites", label: "Sprites", icon: Image },
   { id: "colors", label: "Colors", icon: Palette },
+  { id: "stats", label: "Stats", icon: Swords },
   { id: "advanced", label: "Advanced", icon: Settings2 },
   { id: "lorebook", label: "Lorebook", icon: Library },
 ] as const;
@@ -90,13 +105,10 @@ export function CharacterEditor() {
     }
   }, [rawCharacter]);
 
-  const updateField = useCallback(
-    <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => {
-      setFormData((prev) => (prev ? { ...prev, [key]: value } : prev));
-      setDirty(true);
-    },
-    [],
-  );
+  const updateField = useCallback(<K extends keyof CharacterData>(key: K, value: CharacterData[K]) => {
+    setFormData((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setDirty(true);
+  }, []);
 
   const updateExtension = useCallback((key: string, value: unknown) => {
     setFormData((prev) => {
@@ -165,7 +177,10 @@ export function CharacterEditor() {
 
   const removeTag = (tag: string) => {
     if (!formData) return;
-    updateField("tags", formData.tags.filter((t) => t !== tag));
+    updateField(
+      "tags",
+      formData.tags.filter((t) => t !== tag),
+    );
   };
 
   if (isLoading || !formData) {
@@ -204,13 +219,7 @@ export function CharacterEditor() {
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
             <Camera size={16} className="text-white" />
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleAvatarUpload}
-          />
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -228,10 +237,22 @@ export function CharacterEditor() {
         {/* Favorite toggle */}
         <button
           onClick={() => updateExtension("fav", !formData.extensions.fav)}
-          className={cn("rounded-xl p-2 transition-all", formData.extensions.fav ? "text-yellow-400" : "text-[var(--muted-foreground)] hover:text-yellow-400")}
+          className={cn(
+            "rounded-xl p-2 transition-all",
+            formData.extensions.fav ? "text-yellow-400" : "text-[var(--muted-foreground)] hover:text-yellow-400",
+          )}
           title={formData.extensions.fav ? "Remove from favorites" : "Add to favorites"}
         >
           {formData.extensions.fav ? <Star size={18} fill="currentColor" /> : <StarOff size={18} />}
+        </button>
+
+        {/* Export */}
+        <button
+          onClick={() => api.download(`/characters/${characterId}/export`)}
+          className="rounded-xl p-2 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+          title="Export character"
+        >
+          <Download size={18} />
         </button>
 
         {/* Delete */}
@@ -263,9 +284,7 @@ export function CharacterEditor() {
       {showUnsavedWarning && (
         <div className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
           <AlertTriangle size={15} className="shrink-0 text-amber-500" />
-          <p className="flex-1 text-xs font-medium text-amber-500">
-            You have unsaved changes. Close without saving?
-          </p>
+          <p className="flex-1 text-xs font-medium text-amber-500">You have unsaved changes. Close without saving?</p>
           <button
             onClick={() => setShowUnsavedWarning(false)}
             className="rounded-lg px-3 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)]"
@@ -279,7 +298,10 @@ export function CharacterEditor() {
             Discard & close
           </button>
           <button
-            onClick={async () => { await handleSave(); closeDetail(); }}
+            onClick={async () => {
+              await handleSave();
+              closeDetail();
+            }}
             className="rounded-lg bg-gradient-to-r from-pink-400 to-purple-500 px-3 py-1 text-xs font-medium text-white shadow-sm transition-all hover:shadow-md"
           >
             Save & close
@@ -375,21 +397,14 @@ export function CharacterEditor() {
                 rows={8}
               />
             )}
-            {activeTab === "dialogue" && (
-              <DialogueTab formData={formData} updateField={updateField} />
-            )}
+            {activeTab === "dialogue" && <DialogueTab formData={formData} updateField={updateField} />}
             {activeTab === "advanced" && (
               <AdvancedTab formData={formData} updateField={updateField} updateExtension={updateExtension} />
             )}
-            {activeTab === "sprites" && characterId && (
-              <SpritesTab characterId={characterId} />
-            )}
-            {activeTab === "colors" && (
-              <ColorsTab formData={formData} updateExtension={updateExtension} />
-            )}
-            {activeTab === "lorebook" && (
-              <LorebookTab formData={formData} />
-            )}
+            {activeTab === "sprites" && characterId && <SpritesTab characterId={characterId} />}
+            {activeTab === "colors" && <ColorsTab formData={formData} updateExtension={updateExtension} />}
+            {activeTab === "stats" && <StatsTab formData={formData} updateExtension={updateExtension} />}
+            {activeTab === "lorebook" && <LorebookTab formData={formData} />}
           </div>
         </div>
       </div>
@@ -435,9 +450,7 @@ function TextareaTab({
         rows={rows}
         className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-4 text-sm leading-relaxed outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20"
       />
-      <p className="mt-1.5 text-right text-[10px] text-[var(--muted-foreground)]">
-        {value.length} characters
-      </p>
+      <p className="mt-1.5 text-right text-[10px] text-[var(--muted-foreground)]">{value.length} characters</p>
     </div>
   );
 }
@@ -465,7 +478,10 @@ function MetadataTab({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-1.5">
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Name <HelpTooltip text="The character's display name. This is what appears in chat and is used as {{char}} in prompts." /></span>
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+            Name{" "}
+            <HelpTooltip text="The character's display name. This is what appears in chat and is used as {{char}} in prompts." />
+          </span>
           <input
             value={formData.name}
             onChange={(e) => updateField("name", e.target.value)}
@@ -473,7 +489,10 @@ function MetadataTab({
           />
         </label>
         <label className="space-y-1.5">
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Creator <HelpTooltip text="The person who made this character. Useful for giving credit when sharing characters." /></span>
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+            Creator{" "}
+            <HelpTooltip text="The person who made this character. Useful for giving credit when sharing characters." />
+          </span>
           <input
             value={formData.creator}
             onChange={(e) => updateField("creator", e.target.value)}
@@ -482,7 +501,9 @@ function MetadataTab({
           />
         </label>
         <label className="space-y-1.5">
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Version <HelpTooltip text="Version number for tracking changes to this character definition over time." /></span>
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+            Version <HelpTooltip text="Version number for tracking changes to this character definition over time." />
+          </span>
           <input
             value={formData.character_version}
             onChange={(e) => updateField("character_version", e.target.value)}
@@ -491,7 +512,10 @@ function MetadataTab({
           />
         </label>
         <label className="space-y-1.5">
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Talkativeness <HelpTooltip text="How often this character speaks in group chats. 0% = rarely speaks unless addressed, 100% = responds to almost everything." /></span>
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+            Talkativeness{" "}
+            <HelpTooltip text="How often this character speaks in group chats. 0% = rarely speaks unless addressed, 100% = responds to almost everything." />
+          </span>
           <input
             type="range"
             min={0}
@@ -509,7 +533,10 @@ function MetadataTab({
 
       {/* Tags */}
       <div className="space-y-2">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Tags <HelpTooltip text="Labels for organizing characters. Use tags like 'fantasy', 'sci-fi', 'OC' etc. to categorize and search." /></span>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+          Tags{" "}
+          <HelpTooltip text="Labels for organizing characters. Use tags like 'fantasy', 'sci-fi', 'OC' etc. to categorize and search." />
+        </span>
         <div className="flex flex-wrap gap-1.5">
           {formData.tags.map((tag) => (
             <span
@@ -518,7 +545,10 @@ function MetadataTab({
             >
               <Tag size={10} />
               {tag}
-              <button onClick={() => removeTag(tag)} className="ml-0.5 rounded-full transition-colors hover:text-[var(--destructive)]">
+              <button
+                onClick={() => removeTag(tag)}
+                className="ml-0.5 rounded-full transition-colors hover:text-[var(--destructive)]"
+              >
                 <X size={10} />
               </button>
             </span>
@@ -532,7 +562,10 @@ function MetadataTab({
             placeholder="Add tag…"
             className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-3 py-1.5 text-xs outline-none focus:border-[var(--primary)]/40"
           />
-          <button onClick={addTag} className="rounded-xl bg-[var(--primary)]/15 px-3 py-1.5 text-xs font-medium text-[var(--primary)] transition-all hover:bg-[var(--primary)]/25">
+          <button
+            onClick={addTag}
+            className="rounded-xl bg-[var(--primary)]/15 px-3 py-1.5 text-xs font-medium text-[var(--primary)] transition-all hover:bg-[var(--primary)]/25"
+          >
             Add
           </button>
         </div>
@@ -540,7 +573,10 @@ function MetadataTab({
 
       {/* Creator Notes */}
       <label className="block space-y-1.5">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Creator Notes <HelpTooltip text="Private notes about this character — tips for use, known quirks, recommended settings. Not sent to the AI." /></span>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+          Creator Notes{" "}
+          <HelpTooltip text="Private notes about this character — tips for use, known quirks, recommended settings. Not sent to the AI." />
+        </span>
         <textarea
           value={formData.creator_notes}
           onChange={(e) => updateField("creator_notes", e.target.value)}
@@ -571,7 +607,10 @@ function DialogueTab({
   };
 
   const removeGreeting = (i: number) => {
-    updateField("alternate_greetings", formData.alternate_greetings.filter((_, idx) => idx !== i));
+    updateField(
+      "alternate_greetings",
+      formData.alternate_greetings.filter((_, idx) => idx !== i),
+    );
   };
 
   return (
@@ -583,7 +622,10 @@ function DialogueTab({
 
       {/* First Message */}
       <label className="block space-y-1.5">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">First Message <HelpTooltip text="The character's opening message when a new chat starts. Good first messages set the scene and establish the character's voice." /></span>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+          First Message{" "}
+          <HelpTooltip text="The character's opening message when a new chat starts. Good first messages set the scene and establish the character's voice." />
+        </span>
         <textarea
           value={formData.first_mes}
           onChange={(e) => updateField("first_mes", e.target.value)}
@@ -628,7 +670,10 @@ function DialogueTab({
 
       {/* Example Messages */}
       <label className="block space-y-1.5">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Example Dialogue <HelpTooltip text="Sample conversations showing how the character talks. Helps the AI learn the character's speaking style, vocabulary, and mannerisms." /></span>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+          Example Dialogue{" "}
+          <HelpTooltip text="Sample conversations showing how the character talks. Helps the AI learn the character's speaking style, vocabulary, and mannerisms." />
+        </span>
         <p className="text-[10px] text-[var(--muted-foreground)]/70">
           {"Use <START> to separate exchanges. Use {{user}} and {{char}} as placeholders."}
         </p>
@@ -663,7 +708,10 @@ function AdvancedTab({
       />
 
       <label className="block space-y-1.5">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">System Prompt <HelpTooltip text="Overrides or appends to the main system prompt when this character is active. Use this for character-specific instructions the AI must follow." /></span>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+          System Prompt{" "}
+          <HelpTooltip text="Overrides or appends to the main system prompt when this character is active. Use this for character-specific instructions the AI must follow." />
+        </span>
         <textarea
           value={formData.system_prompt}
           onChange={(e) => updateField("system_prompt", e.target.value)}
@@ -674,7 +722,10 @@ function AdvancedTab({
       </label>
 
       <label className="block space-y-1.5">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">Post-History Instructions <HelpTooltip text="Text inserted after the chat history, right before the AI generates. Great for reminders like 'stay in character' or 'respond in 2 paragraphs'." /></span>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+          Post-History Instructions{" "}
+          <HelpTooltip text="Text inserted after the chat history, right before the AI generates. Great for reminders like 'stay in character' or 'respond in 2 paragraphs'." />
+        </span>
         <textarea
           value={formData.post_history_instructions}
           onChange={(e) => updateField("post_history_instructions", e.target.value)}
@@ -686,12 +737,13 @@ function AdvancedTab({
 
       {/* Depth Prompt */}
       <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <span className="inline-flex items-center gap-1 text-xs font-semibold">Depth Prompt <HelpTooltip text="Injects text at a specific position in the chat history. Depth 0 = at the end, depth 4 = 4 messages back. Useful for persistent reminders." /></span>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold">
+          Depth Prompt{" "}
+          <HelpTooltip text="Injects text at a specific position in the chat history. Depth 0 = at the end, depth 4 = 4 messages back. Useful for persistent reminders." />
+        </span>
         <textarea
           value={depthPrompt.prompt}
-          onChange={(e) =>
-            updateExtension("depth_prompt", { ...depthPrompt, prompt: e.target.value })
-          }
+          onChange={(e) => updateExtension("depth_prompt", { ...depthPrompt, prompt: e.target.value })}
           rows={4}
           className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-3 text-sm outline-none focus:border-[var(--primary)]/40"
           placeholder="Prompt injected at a specific depth in the chat history…"
@@ -714,9 +766,7 @@ function AdvancedTab({
             <span className="text-[var(--muted-foreground)]">Role</span>
             <select
               value={depthPrompt.role}
-              onChange={(e) =>
-                updateExtension("depth_prompt", { ...depthPrompt, role: e.target.value })
-              }
+              onChange={(e) => updateExtension("depth_prompt", { ...depthPrompt, role: e.target.value })}
               className="rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs outline-none"
             >
               <option value="system">System</option>
@@ -733,9 +783,22 @@ function AdvancedTab({
 // ── Sprites Tab ──
 
 const DEFAULT_EXPRESSIONS = [
-  "neutral", "happy", "sad", "angry", "surprised", "embarrassed",
-  "thinking", "laughing", "worried", "scared", "disgusted", "love",
-  "smirk", "crying", "determined", "hurt",
+  "neutral",
+  "happy",
+  "sad",
+  "angry",
+  "surprised",
+  "embarrassed",
+  "thinking",
+  "laughing",
+  "worried",
+  "scared",
+  "disgusted",
+  "love",
+  "smirk",
+  "crying",
+  "determined",
+  "hurt",
 ];
 
 function SpritesTab({ characterId }: { characterId: string }) {
@@ -744,7 +807,9 @@ function SpritesTab({ characterId }: { characterId: string }) {
   const deleteSprite = useDeleteSprite();
   const [newExpression, setNewExpression] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [folderProgress, setFolderProgress] = useState<{ done: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const pendingExpressionRef = useRef("");
 
   const existingExpressions = new Set((sprites as SpriteInfo[] | undefined)?.map((s) => s.expression) ?? []);
@@ -753,7 +818,12 @@ function SpritesTab({ characterId }: { characterId: string }) {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const expression = pendingExpressionRef.current || newExpression.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+    const expression =
+      pendingExpressionRef.current ||
+      newExpression
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "_");
     if (!expression) return;
 
     setUploading(true);
@@ -781,6 +851,45 @@ function SpritesTab({ characterId }: { characterId: string }) {
     fileInputRef.current?.click();
   };
 
+  /** Upload an entire folder of images — each filename becomes the expression name. */
+  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Filter to image files only
+    const imageFiles = Array.from(files).filter((f) => /\.(png|jpg|jpeg|gif|webp|avif)$/i.test(f.name));
+    if (imageFiles.length === 0) return;
+
+    setFolderProgress({ done: 0, total: imageFiles.length });
+
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i]!;
+      // Derive expression name from filename (strip extension, lowercase, sanitize)
+      const expression = file.name
+        .replace(/\.[^.]+$/, "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "_");
+      if (!expression) continue;
+
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+
+      try {
+        await uploadSprite.mutateAsync({ characterId, expression, image: dataUrl });
+      } catch {
+        // Skip failed uploads, continue with the rest
+      }
+      setFolderProgress({ done: i + 1, total: imageFiles.length });
+    }
+
+    setFolderProgress(null);
+    e.target.value = "";
+  };
+
   const handleDelete = async (expression: string) => {
     if (!confirm(`Delete sprite for "${expression}"?`)) return;
     await deleteSprite.mutateAsync({ characterId, expression });
@@ -793,20 +902,43 @@ function SpritesTab({ characterId }: { characterId: string }) {
         subtitle="Upload VN-style sprites for different expressions. The Expression Engine agent will select the appropriate sprite during roleplay."
       />
 
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
       <input
-        ref={fileInputRef}
+        ref={folderInputRef}
         type="file"
         accept="image/*"
+        multiple
+        // @ts-expect-error — webkitdirectory is a non-standard but widely-supported attribute
+        webkitdirectory=""
         className="hidden"
-        onChange={handleUpload}
+        onChange={handleFolderUpload}
       />
 
       {/* Upload new expression */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
-        <h4 className="text-xs font-semibold flex items-center gap-1.5">
-          <Upload size={13} className="text-[var(--y2k-pink)]" />
-          Add Sprite
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold flex items-center gap-1.5">
+            <Upload size={13} className="text-[var(--y2k-pink)]" />
+            Add Sprite
+          </h4>
+          <button
+            onClick={() => folderInputRef.current?.click()}
+            disabled={!!folderProgress}
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--secondary)] px-3 py-1.5 text-[11px] font-medium text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-40"
+            title="Select a folder of PNGs — each filename becomes the expression name"
+          >
+            <FolderOpen size={13} />
+            Upload Folder
+          </button>
+        </div>
+
+        {/* Folder upload progress */}
+        {folderProgress && (
+          <div className="flex items-center gap-2 rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
+            <Loader2 size={12} className="animate-spin text-[var(--y2k-pink)]" />
+            Uploading {folderProgress.done}/{folderProgress.total} sprites…
+          </div>
+        )}
         <div className="flex gap-2">
           <input
             value={newExpression}
@@ -861,11 +993,7 @@ function SpritesTab({ characterId }: { characterId: string }) {
               className="group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] transition-all hover:border-[var(--primary)]/30 hover:shadow-md"
             >
               <div className="aspect-[3/4] bg-[var(--secondary)]">
-                <img
-                  src={sprite.url}
-                  alt={sprite.expression}
-                  className="h-full w-full object-contain"
-                />
+                <img src={sprite.url} alt={sprite.expression} className="h-full w-full object-contain" />
               </div>
               <div className="flex items-center justify-between p-2">
                 <span className="text-[11px] font-medium capitalize">{sprite.expression}</span>
@@ -905,12 +1033,226 @@ function SpritesTab({ characterId }: { characterId: string }) {
       <div className="rounded-xl bg-[var(--card)] p-4 ring-1 ring-[var(--border)]">
         <h4 className="mb-1.5 text-xs font-semibold">How sprites work</h4>
         <ul className="space-y-1 text-[11px] text-[var(--muted-foreground)]">
-          <li>• Upload transparent PNG sprites for each expression (e.g. happy, sad, angry)</li>
-          <li>• Enable the <strong className="text-[var(--foreground)]">Expression Engine</strong> agent in the Agents panel</li>
+          <li>
+            • Upload sprites one by one, or use <strong className="text-[var(--foreground)]">Upload Folder</strong> to
+            bulk-import a folder of PNGs (each filename = expression name, e.g. admiration.png → "admiration")
+          </li>
+          <li>
+            • Enable the <strong className="text-[var(--foreground)]">Expression Engine</strong> agent in the Agents
+            panel
+          </li>
           <li>• During roleplay, the agent will detect emotions and display the matching sprite</li>
           <li>• Sprites appear as VN-style overlays in the chat area</li>
         </ul>
       </div>
+    </div>
+  );
+}
+
+// ── Stats Tab ──
+
+const DEFAULT_RPG_STATS: RPGStatsConfig = {
+  enabled: false,
+  attributes: [
+    { name: "STR", value: 10, max: 20 },
+    { name: "DEX", value: 10, max: 20 },
+    { name: "CON", value: 10, max: 20 },
+    { name: "INT", value: 10, max: 20 },
+    { name: "WIS", value: 10, max: 20 },
+    { name: "CHA", value: 10, max: 20 },
+  ],
+  hp: { value: 100, max: 100 },
+  mp: { value: 50, max: 50 },
+};
+
+function StatsTab({
+  formData,
+  updateExtension,
+}: {
+  formData: CharacterData;
+  updateExtension: (key: string, value: unknown) => void;
+}) {
+  const stats: RPGStatsConfig = (formData.extensions.rpgStats as RPGStatsConfig) ?? DEFAULT_RPG_STATS;
+
+  const update = (patch: Partial<RPGStatsConfig>) => {
+    updateExtension("rpgStats", { ...stats, ...patch });
+  };
+
+  const updateAttribute = (index: number, field: string, value: string | number) => {
+    const next = [...stats.attributes];
+    next[index] = { ...next[index], [field]: value };
+    update({ attributes: next });
+  };
+
+  const addAttribute = () => {
+    update({ attributes: [...stats.attributes, { name: "NEW", value: 10, max: 20 }] });
+  };
+
+  const removeAttribute = (index: number) => {
+    update({ attributes: stats.attributes.filter((_, i) => i !== index) });
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="RPG Stats"
+        subtitle="Toggle stat tracking for this character. When enabled, the character's stats are included in the prompt and tracked by agents."
+      />
+
+      {/* Enable toggle */}
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <input
+          type="checkbox"
+          checked={stats.enabled}
+          onChange={(e) => update({ enabled: e.target.checked })}
+          className="h-4 w-4 rounded accent-purple-500"
+        />
+        <div>
+          <p className="text-sm font-medium">Enable RPG Stats</p>
+          <p className="text-[11px] text-[var(--muted-foreground)]">
+            Stats will be injected into the prompt and tracked by the Character Tracker agent.
+          </p>
+        </div>
+      </label>
+
+      {stats.enabled && (
+        <>
+          {/* HP / MP */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-xs font-semibold">Hit Points (HP)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={stats.hp.value}
+                  onChange={(e) => update({ hp: { ...stats.hp, value: parseInt(e.target.value) || 0 } })}
+                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                />
+                <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                <input
+                  type="number"
+                  value={stats.hp.max}
+                  onChange={(e) => update({ hp: { ...stats.hp, max: parseInt(e.target.value) || 1 } })}
+                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                />
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-black/30">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-red-600 to-red-400 transition-all"
+                  style={{ width: `${Math.min(100, (stats.hp.value / Math.max(1, stats.hp.max)) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                <span className="text-xs font-semibold">Mana Points (MP)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={stats.mp.value}
+                  onChange={(e) => update({ mp: { ...stats.mp, value: parseInt(e.target.value) || 0 } })}
+                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                />
+                <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                <input
+                  type="number"
+                  value={stats.mp.max}
+                  onChange={(e) => update({ mp: { ...stats.mp, max: parseInt(e.target.value) || 1 } })}
+                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
+                />
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-black/30">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all"
+                  style={{ width: `${Math.min(100, (stats.mp.value / Math.max(1, stats.mp.max)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Attributes */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Attributes</h3>
+              <button
+                onClick={addAttribute}
+                className="flex items-center gap-1 rounded-lg bg-purple-500/15 px-2.5 py-1 text-[11px] font-medium text-purple-400 transition-colors hover:bg-purple-500/25"
+              >
+                <Plus size={12} />
+                Add
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {stats.attributes.map((attr, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2"
+                >
+                  <input
+                    value={attr.name}
+                    onChange={(e) => updateAttribute(i, "name", e.target.value)}
+                    className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-xs font-medium"
+                    placeholder="Name"
+                  />
+                  <input
+                    type="number"
+                    value={attr.value}
+                    onChange={(e) => updateAttribute(i, "value", parseInt(e.target.value) || 0)}
+                    className="w-16 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-center text-xs"
+                  />
+                  <span className="text-[10px] text-[var(--muted-foreground)]">/</span>
+                  <input
+                    type="number"
+                    value={attr.max}
+                    onChange={(e) => updateAttribute(i, "max", parseInt(e.target.value) || 1)}
+                    className="w-16 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-center text-xs"
+                  />
+                  {/* Mini bar */}
+                  <div className="flex-1 h-1.5 overflow-hidden rounded-full bg-black/30">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all"
+                      style={{ width: `${Math.min(100, (attr.value / Math.max(1, attr.max)) * 100)}%` }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeAttribute(i)}
+                    className="rounded-lg p-1 text-[var(--muted-foreground)] transition-colors hover:bg-red-500/15 hover:text-red-400"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="rounded-xl bg-[var(--card)] p-4 ring-1 ring-[var(--border)]">
+            <h4 className="mb-1.5 text-xs font-semibold">How stats work</h4>
+            <ul className="space-y-1 text-[11px] text-[var(--muted-foreground)]">
+              <li>
+                &bull; <strong className="text-[var(--foreground)]">HP &amp; MP</strong> — Injected into the prompt so
+                the AI knows the character&apos;s current health and mana.
+              </li>
+              <li>
+                &bull; <strong className="text-[var(--foreground)]">Attributes</strong> — Custom stats (STR, DEX, etc.)
+                that define the character&apos;s capabilities.
+              </li>
+              <li>
+                &bull; The Character Tracker agent adjusts these values based on narrative events (combat, healing,
+                etc.).
+              </li>
+              <li>&bull; Values set here serve as the initial/default state for new conversations.</li>
+            </ul>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -948,7 +1290,12 @@ function ColorsTab({
               style={
                 nameColor
                   ? nameColor.startsWith("linear-gradient")
-                    ? { background: nameColor, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+                    ? {
+                        background: nameColor,
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                      }
                     : { color: nameColor }
                   : { color: "rgb(192, 132, 252)" }
               }
@@ -957,16 +1304,10 @@ function ColorsTab({
             </span>
             <div
               className="rounded-2xl rounded-tl-sm px-4 py-3 text-[13px] leading-[1.8] backdrop-blur-md ring-1 ring-white/8"
-              style={
-                boxColor
-                  ? { backgroundColor: boxColor }
-                  : { backgroundColor: "rgba(255,255,255,0.08)" }
-              }
+              style={boxColor ? { backgroundColor: boxColor } : { backgroundColor: "rgba(255,255,255,0.08)" }}
             >
               <span className="text-white/90">*She looks at you with a warm smile.* </span>
-              <strong
-                style={dialogueColor ? { color: dialogueColor } : { color: "rgb(255, 255, 255)" }}
-              >
+              <strong style={dialogueColor ? { color: dialogueColor } : { color: "rgb(255, 255, 255)" }}>
                 &ldquo;Hello there! How are you?&rdquo;
               </strong>
             </div>
@@ -988,7 +1329,9 @@ function ColorsTab({
         value={dialogueColor}
         onChange={(v) => updateExtension("dialogueColor", v)}
         label="Dialogue Highlight Color"
-        helpText={'Text inside quotation marks ("", \u201c\u201d, \u00ab\u00bb) will be automatically bold and colored with this.'}
+        helpText={
+          'Text inside quotation marks ("", \u201c\u201d, \u00ab\u00bb) will be automatically bold and colored with this.'
+        }
       />
 
       {/* Box Color */}
@@ -1003,9 +1346,18 @@ function ColorsTab({
       <div className="rounded-xl bg-[var(--card)] p-4 ring-1 ring-[var(--border)]">
         <h4 className="mb-1.5 text-xs font-semibold">How colors work</h4>
         <ul className="space-y-1 text-[11px] text-[var(--muted-foreground)]">
-          <li>&bull; <strong className="text-[var(--foreground)]">Name color</strong> — Applied to the character&apos;s display name in chat. Gradients use CSS linear-gradient.</li>
-          <li>&bull; <strong className="text-[var(--foreground)]">Dialogue color</strong> — All text inside double quotes is automatically bold and colored with this value.</li>
-          <li>&bull; <strong className="text-[var(--foreground)]">Box color</strong> — Sets the background color of the character&apos;s message bubble in roleplay mode.</li>
+          <li>
+            &bull; <strong className="text-[var(--foreground)]">Name color</strong> — Applied to the character&apos;s
+            display name in chat. Gradients use CSS linear-gradient.
+          </li>
+          <li>
+            &bull; <strong className="text-[var(--foreground)]">Dialogue color</strong> — All text inside double quotes
+            is automatically bold and colored with this value.
+          </li>
+          <li>
+            &bull; <strong className="text-[var(--foreground)]">Box color</strong> — Sets the background color of the
+            character&apos;s message bubble in roleplay mode.
+          </li>
           <li>&bull; Leave any field empty to use the default theme colors.</li>
         </ul>
       </div>
@@ -1037,15 +1389,13 @@ function LorebookTab({ formData }: { formData: CharacterData }) {
       ) : (
         <div className="space-y-2">
           {entries.map((entry, i) => (
-            <div
-              key={entry.id ?? i}
-              className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3"
-            >
+            <div key={entry.id ?? i} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{entry.name || `Entry #${i + 1}`}</p>
                   <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
-                    Keys: {entry.keys.join(", ")} {entry.secondary_keys.length > 0 && `· Secondary: ${entry.secondary_keys.join(", ")}`}
+                    Keys: {entry.keys.join(", ")}{" "}
+                    {entry.secondary_keys.length > 0 && `· Secondary: ${entry.secondary_keys.join(", ")}`}
                   </p>
                 </div>
                 <span
@@ -1059,9 +1409,7 @@ function LorebookTab({ formData }: { formData: CharacterData }) {
                   {entry.enabled ? "Active" : "Disabled"}
                 </span>
               </div>
-              <p className="mt-2 text-xs text-[var(--muted-foreground)] line-clamp-3">
-                {entry.content}
-              </p>
+              <p className="mt-2 text-xs text-[var(--muted-foreground)] line-clamp-3">{entry.content}</p>
             </div>
           ))}
         </div>

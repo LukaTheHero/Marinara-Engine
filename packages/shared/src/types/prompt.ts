@@ -13,7 +13,7 @@ export type InjectionPosition =
   | "depth";
 
 /** Auto-wrapping format for prompt sections. */
-export type WrapFormat = "xml" | "markdown";
+export type WrapFormat = "xml" | "markdown" | "none";
 
 /** Marker section type for special insertion blocks. */
 export type MarkerType =
@@ -21,9 +21,11 @@ export type MarkerType =
   | "lorebook"
   | "persona"
   | "chat_history"
+  | "chat_summary"
   | "world_info_before"
   | "world_info_after"
-  | "dialogue_examples";
+  | "dialogue_examples"
+  | "agent_data";
 
 /** Configuration for marker-type sections. */
 export interface MarkerConfig {
@@ -37,6 +39,8 @@ export interface MarkerConfig {
     maxMessages?: number;
     includeSystemMessages?: boolean;
   };
+  /** For agent_data markers: the agent type whose output to inject */
+  agentType?: string;
 }
 
 /** A complete prompt preset (template). */
@@ -56,6 +60,8 @@ export interface PromptPreset {
   parameters: GenerationParameters;
   /** Auto-wrapping format: XML (default) or Markdown */
   wrapFormat: WrapFormat;
+  /** Saved default variable selections (variableName → value or values) */
+  defaultChoices: Record<string, string | string[]>;
   /** Whether this is the built-in default preset */
   isDefault: boolean;
   /** Author of this preset */
@@ -112,22 +118,30 @@ export interface PromptSection {
   forbidOverrides: boolean;
 }
 
-/** A choice block attached to a section — the user picks one option per chat. */
+/** A preset-level variable — the user picks one option per chat, referenced via {{variableName}} in prompts. */
 export interface ChoiceBlock {
   id: string;
-  sectionId: string;
-  /** Label shown to the user when selecting (e.g. "Narrative Tense") */
-  label: string;
+  presetId: string;
+  /** Machine name used in macros, e.g. "POV" → {{POV}} */
+  variableName: string;
+  /** Human-readable question shown when selecting (e.g. "What POV do you prefer?") */
+  question: string;
   options: ChoiceOption[];
+  /** If true, the user can select multiple options instead of just one. */
+  multiSelect: boolean;
+  /** Separator used to join multiple selected values (default ", "). Only used when multiSelect=true and randomPick=false. */
+  separator: string;
+  /** If true, one of the user's selected options is randomly picked each generation instead of joining all. */
+  randomPick: boolean;
   createdAt: string;
 }
 
-/** A single option within a choice block. */
+/** A single option within a preset variable. */
 export interface ChoiceOption {
   id: string;
   label: string;
-  /** The content that replaces the section's default content when selected */
-  content: string;
+  /** The value injected when this option is selected */
+  value: string;
 }
 
 /** A group of mutually exclusive variable options (radio toggle). */
@@ -157,13 +171,21 @@ export interface GenerationParameters {
   frequencyPenalty: number;
   presencePenalty: number;
   /** For reasoning models */
-  reasoningEffort: "low" | "medium" | "high" | null;
+  reasoningEffort: "low" | "medium" | "high" | "maximum" | null;
+  /** Output verbosity for models that support it (GPT-5+) */
+  verbosity: "low" | "medium" | "high" | null;
   /** Merge consecutive system messages */
   squashSystemMessages: boolean;
   /** Show model reasoning/thinking */
   showThoughts: boolean;
+  /** Automatically use the model's maximum context window instead of the manual value */
+  useMaxContext: boolean;
   /** Custom stop sequences */
   stopSequences: string[];
+  /** Strict role formatting: system first, then alternating user/assistant. Sections after chat_history become user role. */
+  strictRoleFormatting: boolean;
+  /** Send entire prompt + chat history as a single user message */
+  singleUserMessage: boolean;
 }
 
 /** Well-known built-in marker identifiers (match ST). */
