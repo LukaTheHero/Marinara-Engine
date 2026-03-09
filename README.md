@@ -108,6 +108,16 @@ All agents are disabled by default — enable only the ones you want. You can al
 
 ## Installation
 
+### Windows Installer (Recommended)
+
+Download **[Marinara-Engine-Installer-1.1.0.exe](https://github.com/SpicyMarinara/Marinara-Engine/releases/download/v1.1.0/Marinara-Engine-Installer-1.1.0.exe)** from the [Releases](https://github.com/SpicyMarinara/Marinara-Engine/releases) page and run it. The installer checks for Node.js and Git, clones the repo, installs everything, and creates a desktop shortcut.
+
+You still need **Node.js** and **Git** installed first (the installer will tell you if they're missing).
+
+---
+
+### Run from Source (All Platforms)
+
 ### Prerequisites
 
 You need **Node.js** and **Git** installed before running Marinara Engine. pnpm is handled automatically by the start script.
