@@ -21,114 +21,82 @@ echo.
 echo  [..] Checking prerequisites...
 
 :: ── Node.js ──
-set "NEED_NODE=0"
 where node >nul 2>&1
-if %errorlevel% neq 0 (
-    set "NEED_NODE=1"
-) else (
-    for /f "tokens=1 delims=." %%a in ('node -v') do set "NODE_RAW=%%a"
-    set "NODE_MAJOR=!NODE_RAW:v=!"
-    if not defined NODE_MAJOR set "NEED_NODE=1"
-    if defined NODE_MAJOR if !NODE_MAJOR! LSS 20 set "NEED_NODE=1"
-)
+if errorlevel 1 goto :install_node
+for /f "tokens=1 delims=." %%a in ('node -v') do set "NODE_RAW=%%a"
+set "NODE_MAJOR=!NODE_RAW:v=!"
+if not defined NODE_MAJOR goto :install_node
+if !NODE_MAJOR! LSS 20 goto :install_node
+goto :node_ok
 
-if "!NEED_NODE!"=="1" (
-    echo  [..] Node.js 20+ not found — downloading installer...
-    set "NODE_MSI=%TEMP%\node-lts-install.msi"
-    powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi' -OutFile '!NODE_MSI!' -UseBasicParsing } catch { exit 1 }"
-    if !errorlevel! neq 0 (
-        echo  [ERROR] Failed to download Node.js. Please install manually from https://nodejs.org
-        pause
-        exit /b 1
-    )
-    echo  [..] Installing Node.js (this may request admin permissions)...
-    msiexec /i "!NODE_MSI!" /qb
-    if !errorlevel! neq 0 (
-        echo  [ERROR] Node.js installation failed. Please install manually from https://nodejs.org
-        pause
-        exit /b 1
-    )
-    del "!NODE_MSI!" 2>nul
-    :: Refresh PATH so node is available in this session
-    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
-    for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
-    set "PATH=!SYS_PATH!;!USR_PATH!"
-    where node >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo  [ERROR] Node.js was installed but not found in PATH. Please restart your terminal and re-run.
-        pause
-        exit /b 1
-    )
-    echo  [OK] Node.js installed successfully
-)
+:install_node
+echo  [..] Node.js 20+ not found — downloading installer...
+set "NODE_MSI=%TEMP%\node-lts-install.msi"
+powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi' -OutFile '%NODE_MSI%' -UseBasicParsing } catch { exit 1 }"
+if errorlevel 1 echo  [ERROR] Failed to download Node.js. Please install manually from https://nodejs.org & pause & exit /b 1
+echo  [..] Installing Node.js (this may request admin permissions)...
+msiexec /i "%NODE_MSI%" /qb
+if errorlevel 1 echo  [ERROR] Node.js installation failed. Please install manually from https://nodejs.org & pause & exit /b 1
+del "%NODE_MSI%" 2>nul
+call :refresh_path
+where node >nul 2>&1
+if errorlevel 1 echo  [ERROR] Node.js installed but not found in PATH. Please restart your terminal and re-run. & pause & exit /b 1
+echo  [OK] Node.js installed successfully
+
+:node_ok
 echo  [OK] Node.js found:
 node -v
 
 :: ── Git ──
-set "NEED_GIT=0"
 where git >nul 2>&1
-if %errorlevel% neq 0 set "NEED_GIT=1"
+if errorlevel 1 goto :install_git
+goto :git_ok
 
-if "!NEED_GIT!"=="1" (
-    echo  [..] Git not found — downloading installer...
-    set "GIT_EXE=%TEMP%\git-install.exe"
-    powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/git-for-windows/git/releases/latest' -UseBasicParsing; $asset = $rel.assets | Where-Object { $_.name -match '64-bit\.exe$' } | Select-Object -First 1; Invoke-WebRequest -Uri $asset.browser_download_url -OutFile '!GIT_EXE!' -UseBasicParsing } catch { exit 1 }"
-    if !errorlevel! neq 0 (
-        echo  [ERROR] Failed to download Git. Please install manually from https://git-scm.com
-        pause
-        exit /b 1
-    )
-    echo  [..] Installing Git (this may request admin permissions)...
-    "!GIT_EXE!" /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"
-    if !errorlevel! neq 0 (
-        echo  [ERROR] Git installation failed. Please install manually from https://git-scm.com
-        pause
-        exit /b 1
-    )
-    del "!GIT_EXE!" 2>nul
-    :: Refresh PATH
-    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
-    for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
-    set "PATH=!SYS_PATH!;!USR_PATH!"
-    where git >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo  [ERROR] Git was installed but not found in PATH. Please restart your terminal and re-run.
-        pause
-        exit /b 1
-    )
-    echo  [OK] Git installed successfully
-)
+:install_git
+echo  [..] Git not found — downloading installer...
+set "GIT_EXE=%TEMP%\git-install.exe"
+powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/git-for-windows/git/releases/latest' -UseBasicParsing; $asset = $rel.assets | Where-Object { $_.name -match '64-bit\.exe$' } | Select-Object -First 1; Invoke-WebRequest -Uri $asset.browser_download_url -OutFile '%GIT_EXE%' -UseBasicParsing } catch { exit 1 }"
+if errorlevel 1 echo  [ERROR] Failed to download Git. Please install manually from https://git-scm.com & pause & exit /b 1
+echo  [..] Installing Git (this may request admin permissions)...
+"%GIT_EXE%" /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"
+if errorlevel 1 echo  [ERROR] Git installation failed. Please install manually from https://git-scm.com & pause & exit /b 1
+del "%GIT_EXE%" 2>nul
+call :refresh_path
+where git >nul 2>&1
+if errorlevel 1 echo  [ERROR] Git installed but not found in PATH. Please restart your terminal and re-run. & pause & exit /b 1
+echo  [OK] Git installed successfully
+
+:git_ok
 echo  [OK] Git found
 
 :: ── Install pnpm if needed ──
 where pnpm >nul 2>&1
-if %errorlevel% neq 0 (
-    echo  [..] Installing pnpm...
-    npm install -g pnpm
-    if %errorlevel% neq 0 (
-        echo  [ERROR] Failed to install pnpm. Please run: npm install -g pnpm
-        pause
-        exit /b 1
-    )
-)
+if errorlevel 1 goto :install_pnpm
+goto :pnpm_ok
+
+:install_pnpm
+echo  [..] Installing pnpm...
+npm install -g pnpm
+if errorlevel 1 echo  [ERROR] Failed to install pnpm. Please run: npm install -g pnpm & pause & exit /b 1
+
+:pnpm_ok
 echo  [OK] pnpm found
 
 :: ── Clone repository ──
 echo.
-if exist "%INSTALL_DIR%\.git" (
-    echo  [..] Existing installation found, updating...
-    cd /d "%INSTALL_DIR%"
-    git pull
-) else (
-    echo  [..] Cloning Marinara Engine to %INSTALL_DIR%...
-    git clone https://github.com/SpicyMarinara/Marinara-Engine.git "%INSTALL_DIR%"
-    if %errorlevel% neq 0 (
-        echo  [ERROR] Failed to clone repository.
-        pause
-        exit /b 1
-    )
-    cd /d "%INSTALL_DIR%"
-)
+if exist "%INSTALL_DIR%\.git" goto :update_repo
+echo  [..] Cloning Marinara Engine to %INSTALL_DIR%...
+git clone https://github.com/SpicyMarinara/Marinara-Engine.git "%INSTALL_DIR%"
+if errorlevel 1 echo  [ERROR] Failed to clone repository. & pause & exit /b 1
+cd /d "%INSTALL_DIR%"
+goto :deps
+
+:update_repo
+echo  [..] Existing installation found, updating...
+cd /d "%INSTALL_DIR%"
+git pull
+
+:deps
 
 :: ── Install dependencies ──
 echo.
@@ -189,3 +157,11 @@ echo    http://localhost:7860
 echo  ══════════════════════════════════════════
 echo.
 pause
+goto :eof
+
+:: ── Subroutine: refresh PATH from registry ──
+:refresh_path
+for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
+for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
+set "PATH=!SYS_PATH!;!USR_PATH!"
+goto :eof
