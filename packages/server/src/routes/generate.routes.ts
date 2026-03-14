@@ -1514,7 +1514,6 @@ export async function generateRoutes(app: FastifyInstance) {
           messagesWithInstruction.push({ role: "system", content: charInstruction });
 
           const genResult = await generateForCharacter(charId, messagesWithInstruction);
-          if (!genResult) break; // aborted
           lastSavedMsg = genResult.savedMsg;
           allResponses.push(genResult.response);
 
@@ -1525,9 +1524,7 @@ export async function generateRoutes(app: FastifyInstance) {
         // Single/merged: one generation
         const targetCharId = characterIds[0] ?? null;
         const genResult = await generateForCharacter(targetCharId, finalMessages);
-        if (genResult) {
-          lastSavedMsg = genResult.savedMsg;
-        }
+        lastSavedMsg = genResult.savedMsg;
         allResponses.push(fullResponse);
       }
 

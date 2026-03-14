@@ -71,8 +71,12 @@ async function createWithSqlJs(dbPath: string): Promise<DrizzleDB> {
   timer.unref(); // Don't prevent process exit
 
   // Save on clean shutdown
-  for (const sig of ["beforeExit", "SIGINT", "SIGTERM"] as const) {
-    process.on(sig, save);
+  process.on("beforeExit", save);
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.once(sig, () => {
+      save();
+      process.exit(0);
+    });
   }
 
   return drizzle(sqlDb, { schema }) as unknown as DrizzleDB;

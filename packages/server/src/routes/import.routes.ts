@@ -301,11 +301,19 @@ export async function importRoutes(app: FastifyInstance) {
     return { success: true, path: selected };
   });
 
-  /** List directories at a given path (for remote/headless folder browsing). */
+  /** List directories at a given path (for remote/headless folder browsing).
+   *  Restricted to subdirectories of the user's home directory to prevent
+   *  arbitrary filesystem enumeration. */
   app.post<{ Body: { path?: string } }>("/list-directory", async (req) => {
+    const home = homedir();
     const requestedPath = (req.body?.path || "").trim();
-    const dirPath = requestedPath || homedir();
+    const dirPath = requestedPath || home;
     const resolved = pathResolve(dirPath);
+
+    // Restrict browsing to the home directory tree
+    if (!resolved.startsWith(home)) {
+      return { success: false, error: "Access denied: path outside home directory" };
+    }
 
     try {
       const info = await stat(resolved);

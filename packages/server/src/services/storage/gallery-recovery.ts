@@ -6,7 +6,7 @@
 // a new DB record is inserted so the gallery UI shows the image again.
 import { existsSync, readdirSync, statSync } from "fs";
 import { join, extname } from "path";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { DB } from "../../db/connection.js";
 import { chatImages, chats } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
