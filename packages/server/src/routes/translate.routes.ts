@@ -112,6 +112,10 @@ async function translateWithDeepLX(input: z.infer<typeof translateSchema>) {
       source_lang: "auto",
       target_lang: input.targetLanguage.toUpperCase(),
     }),
+    signal: AbortSignal.timeout(15_000),
+  }).catch((err) => {
+    if (err.name === "TimeoutError") throw Object.assign(new Error("DeepLX request timed out"), { statusCode: 502 });
+    throw err;
   });
 
   if (!response.ok) {
@@ -142,6 +146,10 @@ async function translateWithDeepL(input: z.infer<typeof translateSchema>) {
       text: [input.text],
       target_lang: input.targetLanguage.toUpperCase(),
     }),
+    signal: AbortSignal.timeout(15_000),
+  }).catch((err) => {
+    if (err.name === "TimeoutError") throw Object.assign(new Error("DeepL request timed out"), { statusCode: 502 });
+    throw err;
   });
 
   if (!response.ok) {
@@ -170,7 +178,11 @@ async function translateWithGoogle(input: z.infer<typeof translateSchema>) {
   url.searchParams.set("dt", "t");
   url.searchParams.set("q", input.text);
 
-  const response = await fetch(url.toString());
+  const response = await fetch(url.toString(), { signal: AbortSignal.timeout(15_000) }).catch((err) => {
+    if (err.name === "TimeoutError")
+      throw Object.assign(new Error("Google Translate request timed out"), { statusCode: 502 });
+    throw err;
+  });
 
   if (!response.ok) {
     throw Object.assign(new Error(`Google Translate returned ${response.status}`), { statusCode: 502 });

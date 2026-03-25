@@ -1719,7 +1719,7 @@ export async function generateRoutes(app: FastifyInstance) {
             const lastRunIdx = allChatMessages.findIndex((m: any) => m.id === lastRunMsgId);
             const messagesAfter =
               lastRunIdx >= 0 ? allChatMessages.slice(lastRunIdx + 1).filter((m: any) => m.role === "assistant") : [];
-            if (messagesAfter.length < runInterval) {
+            if (messagesAfter.length + 1 < runInterval) {
               // Not enough messages since last run — remove from pipeline
               resolvedAgents.splice(resolvedAgents.indexOf(lkAgent), 1);
             }
@@ -1730,7 +1730,7 @@ export async function generateRoutes(app: FastifyInstance) {
         // ── Feed existing entry names to the agent for deduplication ──
         if (resolvedAgents.some((a) => a.type === "lorebook-keeper") && enabledIds.length > 0) {
           try {
-            const existingEntries = await lorebooksStore.listEntries(enabledIds[0]!);
+            const existingEntries = await lorebooksStore.listEntriesByLorebooks(enabledIds);
             const entryNames = existingEntries.map((e: any) => ({
               name: e.name,
               keys: e.keys,
