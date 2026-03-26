@@ -62,8 +62,14 @@ export async function connectionsRoutes(app: FastifyInstance) {
         headers[provider.apiKeyHeader] = conn.apiKey;
       }
 
-      // image_generation has no standard modelsEndpoint; try /models as a connectivity check
-      let testUrl = `${baseUrl}${provider?.modelsEndpoint || "/models"}`;
+      // image_generation has no standard modelsEndpoint — use provider-specific checks
+      let testUrl: string;
+      if (conn.provider === "image_generation" && baseUrl.toLowerCase().includes("novelai.net")) {
+        // NovelAI: validate the API key via the user subscription endpoint
+        testUrl = "https://api.novelai.net/user/subscription";
+      } else {
+        testUrl = `${baseUrl}${provider?.modelsEndpoint || "/models"}`;
+      }
 
       const res = await fetch(testUrl, { headers });
       const latencyMs = Date.now() - start;
