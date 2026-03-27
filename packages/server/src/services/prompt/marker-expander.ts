@@ -87,7 +87,15 @@ async function expandCharacter(config: MarkerConfig, ctx: MarkerContext): Promis
     if (!row) continue;
     const data = JSON.parse(row.data) as CharacterData;
 
-    const fields = config.characterFields ?? ["description", "personality", "scenario"];
+    const fields = config.characterFields ?? [
+      "description",
+      "personality",
+      "scenario",
+      "backstory",
+      "appearance",
+      "system_prompt",
+      "post_history_instructions",
+    ];
 
     const charParts: string[] = [];
     for (const field of fields) {
@@ -98,11 +106,11 @@ async function expandCharacter(config: MarkerConfig, ctx: MarkerContext): Promis
       }
     }
 
-    // Auto-include stats if rpgStats is enabled and not already in fields
-    if (!fields.includes("stats")) {
+    // Auto-include RPG attributes if enabled and not already in fields
+    if (!fields.includes("stats") && !fields.includes("rpg_attributes")) {
       const statsText = formatRPGStats(data.extensions?.rpgStats as RPGStatsConfig | undefined);
       if (statsText) {
-        charParts.push(wrapContent(statsText, "stats", ctx.wrapFormat, 2));
+        charParts.push(wrapContent(statsText, "rpg_attributes", ctx.wrapFormat, 2));
       }
     }
 
@@ -134,6 +142,9 @@ function getCharacterField(data: CharacterData, field: string): string {
       return data.post_history_instructions;
     case "creator_notes":
       return data.creator_notes;
+    case "mes_example":
+    case "example_dialogue":
+      return data.mes_example;
     case "backstory":
       return data.extensions?.backstory ?? "";
     case "appearance":
