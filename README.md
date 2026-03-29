@@ -75,11 +75,11 @@
 
 **Bug Fixes:**
 
-- Fixed Echo Chamber agent count badge not updating
-- Fixed combat agent type mismatch error
-- Fixed Character Menu `.marinara` file import failing silently
-- "Clear Trackers" now also clears committed agent runs and agent memory from the database
-- Removed unused connections data from profile export envelope
+- Fixed the Echo Chamber agent count badge not updating.
+- Fixed combat agent type mismatch error.
+- Fixed Character Menu `.marinara` file import failing silently.
+- "Clear Trackers" now also clears committed agent runs and agent memory from the database.
+- Removed unused connections data from profile export envelope.
 
 ---
 
@@ -297,7 +297,7 @@ Agents are autonomous AI assistants that run alongside your chat, each handling 
 | **Response Orchestrator** | Decides which character(s) should respond in group Conversations             |
 | **Love Toys Control**     | Controls Buttplug.io haptic devices with per-device capability awareness     |
 | **CYOA Choices**          | Generates 2–4 in-character choices for the player after each response        |
-| **Autonomous Messenger**  | Lets characters send messages unprompted when the user is inactive           |
+| **Autonomous Messenger**  | Allows characters to send messages unprompted when the user is inactive      |
 
 All agents are disabled by default — enable only the ones you want. You can also create **custom agents** with your own prompts and tool configurations.
 
