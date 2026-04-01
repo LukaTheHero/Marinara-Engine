@@ -594,7 +594,7 @@ export const useUIStore = create<UIState>()(
           if (persisted.narrationOpacity === undefined) persisted.narrationOpacity = 80;
           if (persisted.chatFontColor === undefined) persisted.chatFontColor = "";
           if (persisted.chatFontOpacity === undefined) persisted.chatFontOpacity = 90;
-          if (persisted.textStrokeWidth === undefined) persisted.textStrokeWidth = 0;
+          if (persisted.textStrokeWidth === undefined) persisted.textStrokeWidth = 0.5;
           if (persisted.textStrokeColor === undefined) persisted.textStrokeColor = "#000000";
         }
         return persisted;

@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Chat Folders
 // ──────────────────────────────────────────────
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { DB } from "../../db/connection.js";
 import { chatFolders, chats } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";

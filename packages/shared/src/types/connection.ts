@@ -34,6 +34,10 @@ export interface APIConnection {
   embeddingModel: string | null;
   /** Separate base URL for the embedding backend (e.g. a second llama.cpp on a different port) */
   embeddingBaseUrl: string | null;
+  /** Preferred provider when using OpenRouter (e.g. "anthropic", "google") */
+  openrouterProvider: string | null;
+  /** ComfyUI workflow JSON for image generation */
+  comfyuiWorkflow: string | null;
   createdAt: string;
   updatedAt: string;
 }
