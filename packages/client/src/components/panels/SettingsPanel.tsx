@@ -1747,7 +1747,7 @@ function AdvancedSettings() {
 
   const currentReleaseLabel = `v${health.data?.version ?? updateCheck.data?.currentVersion ?? APP_VERSION}`;
   const currentCommit = health.data?.commit ?? updateCheck.data?.currentCommit ?? null;
-  const currentBuildLabel = currentCommit ? `Build: ${currentCommit}` : "Build: unavailable";
+  const currentBuildLabel = currentCommit ? `Build: ${currentCommit.slice(0, 7)}` : "Build: unavailable";
 
   return (
     <div className="flex flex-col gap-3">
