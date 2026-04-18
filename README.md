@@ -58,7 +58,7 @@
 
 ## Latest Release
 
-Current stable release: **[v1.4.8](https://github.com/Pasta-Devs/Marinara-Engine/releases/tag/v1.4.8)**.
+Current stable release: **[v1.5.0](https://github.com/Pasta-Devs/Marinara-Engine/releases/tag/v1.5.0)**.
 
 Detailed release notes now live in [CHANGELOG.md](CHANGELOG.md). Tagged releases use the `vX.Y.Z` format, and GitHub Releases remain the publication mechanism for installers, release notes, and update metadata.
 
@@ -75,7 +75,7 @@ Detailed release notes now live in [CHANGELOG.md](CHANGELOG.md). Tagged releases
 
 ### Windows Easiest Method
 
-Download **[Marinara-Engine-Installer-1.4.8.exe](https://github.com/Pasta-Devs/Marinara-Engine/releases/download/v1.4.8/Marinara-Engine-Installer-1.4.8.exe)** from the [Releases](https://github.com/Pasta-Devs/Marinara-Engine/releases) page and run it. The installer checks for Node.js and Git, clones the repo, installs dependencies, builds the app, and creates a desktop shortcut.
+Download **[Marinara-Engine-Installer-1.5.0.exe](https://github.com/Pasta-Devs/Marinara-Engine/releases/download/v1.5.0/Marinara-Engine-Installer-1.5.0.exe)** from the [Releases](https://github.com/Pasta-Devs/Marinara-Engine/releases) page and run it. The installer checks for Node.js and Git, clones the repo, installs dependencies, builds the app, and creates a desktop shortcut.
 
 ### Run from Source (All Platforms)
 
@@ -474,6 +474,7 @@ Look for `marinara-engine.db` plus any `-wal` and `-shm` companion files. The se
 - [Andy Mauragis](https://github.com/amauragis)
 - [LukaTheHero](https://github.com/LukaTheHero)
 - [TheLonelyDevil9](https://github.com/TheLonelyDevil9)
+- [Ailthrim](https://github.com/joshellis625)
 
 ---
 

@@ -32,6 +32,23 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 - Restored local data-path compatibility so existing installs continue to resolve storage under `packages/server/data`.
 - Update checks now resolve the newest GitHub `v*` tag even when `releases/latest` is stale.
 
+# v1.5.0
+
+## Features
+- Introducing the new **Game Mode**! A cross between a classic roleplay and a visual novel, fully driven by the AI GM! Embark on adventures either solo or with a party of characters of your choice. Or perhaps have one of your characters DM the game for you and others? The games span multiple sessions, and *anything* can happen. The sky is the limit. Well, I guess your wallet, too.
+- Follow an easy and quick game setup wizard to customize your game, or ask the model to come up with the ideas for you.
+- The game's UI is a cross between RPGs (think Baldur's Gate) and visual novels. Witness dynamically changing dialogues, backgrounds, sprites, ambiance, music, sounds, and weather; all based on your current scene. The mode supports sprites and will show them with different expressions. You have an item inventory, an automatically updated journal storing information about your adventure, and an option to talk to your party whenever you feel like simply chatting with them instead of progressing.
+- Your party, and you, all have unique character cards, secrets, and goals to achieve. Remember to keep morale high.
+- Do dice rolls yourself or let the GM handle those for you. 
+
+## Fixes
+
+## Plans
+- Adding Marinara Engine as a free-to-download app on both Android and iPhone mobiles.
+- An engine feature allowing you to set up full games with your curated sprites, soundtracks, scenarios, etc., and share them with others.
+- Different supported game modes, including more tabletop-like gameplay, point-and-click games, and classic text adventures.
+- Overall improvements and addressing any bugs that pop up along the way.
+
 ## [1.4.7]
 
 ### Added
