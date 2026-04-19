@@ -32,6 +32,7 @@ export function ModelDownloadModal({ open, onClose }: Props) {
   const {
     status,
     config,
+    modelDownloaded,
     runtime,
     inferenceReady,
     logPath,
@@ -54,8 +55,11 @@ export function ModelDownloadModal({ open, onClose }: Props) {
   const [selectedCustomPath, setSelectedCustomPath] = useState("");
 
   const isDownloading = downloadProgress?.status === "downloading";
-  const hasModel = !!config.modelPath;
-  const activeModelName = useMemo(() => config.modelPath?.split("/").pop() ?? null, [config.modelPath]);
+  const hasModel = modelDownloaded;
+  const activeModelName = useMemo(
+    () => (hasModel ? config.modelPath?.split("/").pop() ?? null : null),
+    [config.modelPath, hasModel],
+  );
   const shouldAutoStart = config.useForTrackers || config.useForGameScene;
   const isPreparingServer =
     hasModel &&
