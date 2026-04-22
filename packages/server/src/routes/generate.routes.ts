@@ -4821,7 +4821,7 @@ export async function generateRoutes(app: FastifyInstance) {
 
         if (regenGroupChatIndividual) {
           if (regenMsg?.chatId !== input.chatId) return reply.code(400).send({ error: "Regenerated message does not belong to this chat" });
-          if (!regenMsg?.characterId) return reply.code(404).send({ error: "Regenerated message is missing character" })
+          if (!regenMsg?.characterId) return reply.code(400).send({ error: "Regenerated message is missing character" })
 
           // Get character of regenerated message and append "Respond ONLY as [name]" instruction
           targetCharId = regenMsg?.characterId ?? null;
