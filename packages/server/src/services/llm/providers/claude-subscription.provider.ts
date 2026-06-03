@@ -267,13 +267,21 @@ export class ClaudeSubscriptionProvider extends BaseLLMProvider {
   }
 
   async *chat(messages: ChatMessage[], options: ChatOptions): AsyncGenerator<string, LLMUsage | void, unknown> {
+    // Model IDs may carry a `[1m]` suffix mirroring the Claude CLI's
+    // "(1M context)" selector entries. The suffix isn't a real model string, so
+    // strip it to a plain ID the SDK accepts and enable the 1M-context beta
+    // below instead. Everything downstream (resume JSONL, SDK model, downgrade
+    // detection) must use the resolved ID, never the suffixed one.
+    const oneMContext = options.model.endsWith("[1m]");
+    const model = oneMContext ? options.model.slice(0, -"[1m]".length) : options.model;
+
     const configuredMaxTokens = options.maxTokens ?? 4096;
     const contextFit = this.fitMessagesToContext(messages, { ...options, maxTokens: configuredMaxTokens });
-    this.logContextTrim(contextFit, options.model);
+    this.logContextTrim(contextFit, model);
 
     const { promptArg, systemPrompt, resumeSessionId, resumeCwd, sessionStore } = selectPromptPath(
       contextFit.messages,
-      options.model,
+      model,
     );
 
     const { query } = await loadSdk();
@@ -291,7 +299,7 @@ export class ClaudeSubscriptionProvider extends BaseLLMProvider {
     // Opus 4.7+ is adaptive-only (sampling parameters rejected); other models
     // accept temperature etc. but the Agent SDK doesn't expose those knobs
     // directly, so we skip them and rely on the SDK defaults.
-    const modelLower = options.model.toLowerCase();
+    const modelLower = model.toLowerCase();
     const isAdaptiveOnly = /claude-opus-4-(?:[7-9]|\d{2,})/.test(modelLower);
 
     // Outbound-context strip strategy: this provider is a text-chat surface
@@ -326,7 +334,7 @@ export class ClaudeSubscriptionProvider extends BaseLLMProvider {
 
     const sdkOptions: Parameters<SdkModule["query"]>[0]["options"] = {
       abortController,
-      model: options.model,
+      model,
       includePartialMessages: options.stream ?? true,
       tools: [],
       skills: [],
@@ -341,6 +349,12 @@ export class ClaudeSubscriptionProvider extends BaseLLMProvider {
       settings: { fastMode: this.fastMode },
     };
     if (systemPrompt !== undefined) sdkOptions.systemPrompt = systemPrompt;
+
+    // 1M-context selections enable Anthropic's long-context beta. The plain
+    // model ID is already set above; the beta is what actually widens the
+    // window. The SDK rejects it with a clear error if the plan/model can't run
+    // it, so no extra gating is needed here.
+    if (oneMContext) sdkOptions.betas = ["context-1m-2025-08-07"];
 
     if (options.enableThinking) {
       sdkOptions.thinking = { type: "adaptive" };
@@ -513,7 +527,7 @@ export class ClaudeSubscriptionProvider extends BaseLLMProvider {
             const fastModeState = message.fast_mode_state;
             finalUsedModels = usedModels;
             finalFastModeState = fastModeState ?? null;
-            const billedDifferent = usedModels.length > 0 && !usedModels.includes(options.model);
+            const billedDifferent = usedModels.length > 0 && !usedModels.includes(model);
             if (billedDifferent) {
               logger.warn(
                 "[claude-subscription] Requested %s but SDK billed against %s (fast_mode_state=%s, session=%s) — check `claude` CLI fast mode / rate-limit cooldown",
