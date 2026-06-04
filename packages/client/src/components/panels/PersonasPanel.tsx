@@ -66,7 +66,6 @@ type PersonaGroupRow = { id: string; name: string; description: string; personaI
 type ParsedPersonaGroupRow = PersonaGroupRow & { memberIds: string[]; isSynthetic?: boolean };
 
 type SortOption = "name-asc" | "name-desc" | "newest" | "oldest" | "tokens";
-const UNGROUPED_PERSONA_GROUP_ID = "__ungrouped-personas__";
 
 function estimateTokens(p: PersonaRow): number {
   const text = [p.description, p.personality, p.scenario, p.backstory, p.appearance].join("");
@@ -86,6 +85,8 @@ export function PersonasPanel() {
   const deletePGroup = useDeletePersonaGroup();
   const openPersonaDetail = useUIStore((s) => s.openPersonaDetail);
   const openModal = useUIStore((s) => s.openModal);
+  const expandedPersonaGroupIds = useUIStore((s) => s.expandedPersonaGroupIds);
+  const togglePersonaGroupExpanded = useUIStore((s) => s.togglePersonaGroupExpanded);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [avatarTargetId, setAvatarTargetId] = useState<string | null>(null);
@@ -99,9 +100,10 @@ export function PersonasPanel() {
   const [exportingSelected, setExportingSelected] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
-  // Groups state
+  // Groups state. Which group folders are expanded lives in the UI store so the
+  // open/closed state is synced server-side and persists across reloads,
+  // storage clears, and devices. Multiple folders can be open at once.
   const [groupsExpanded, setGroupsExpanded] = useState(true);
-  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -191,8 +193,7 @@ export function PersonasPanel() {
 
   const parsedGroups = useMemo<ParsedPersonaGroupRow[]>(() => {
     if (!personaGroupsRaw) return [];
-    const assignedIds = new Set<string>();
-    const realGroups = (personaGroupsRaw as PersonaGroupRow[]).map((g) => {
+    return (personaGroupsRaw as PersonaGroupRow[]).map((g) => {
       const memberIds = (() => {
         try {
           return JSON.parse(g.personaIds);
@@ -200,29 +201,22 @@ export function PersonasPanel() {
           return [];
         }
       })() as string[];
-      for (const id of memberIds) assignedIds.add(id);
       return {
         ...g,
         memberIds,
       };
     });
-    const ungroupedMemberIds = rawList
-      .filter((persona) => !assignedIds.has(persona.id))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((persona) => persona.id);
-    if (ungroupedMemberIds.length === 0) return realGroups;
-    return [
-      ...realGroups,
-      {
-        id: UNGROUPED_PERSONA_GROUP_ID,
-        name: "Ungrouped",
-        description: "Personas not assigned to any group",
-        personaIds: JSON.stringify(ungroupedMemberIds),
-        memberIds: ungroupedMemberIds,
-        isSynthetic: true,
-      },
-    ];
-  }, [personaGroupsRaw, rawList]);
+  }, [personaGroupsRaw]);
+
+  // Personas that belong to at least one group. Grouped personas show only
+  // inside their group; the flat list below renders ungrouped personas only.
+  const groupedPersonaIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const group of parsedGroups) {
+      for (const id of group.memberIds) ids.add(id);
+    }
+    return ids;
+  }, [parsedGroups]);
 
   const handleCreateGroup = useCallback(() => {
     const name = newGroupName.trim();
@@ -295,6 +289,14 @@ export function PersonasPanel() {
         return arr;
     }
   }, [filteredList, sort]);
+
+  // The flat list shows ungrouped personas only — grouped personas live inside
+  // their group above. While assigning to a group or bulk-selecting, show every
+  // persona so those flows can still reach grouped ones.
+  const ungroupedList = useMemo(() => {
+    if (assigningToGroup || selectionMode) return list;
+    return list.filter((persona) => !groupedPersonaIds.has(persona.id));
+  }, [list, groupedPersonaIds, assigningToGroup, selectionMode]);
 
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
@@ -610,19 +612,19 @@ export function PersonasPanel() {
 
             {/* Group rows */}
             {parsedGroups.map((group) => {
-              const isExpanded = expandedGroupId === group.id;
+              const isExpanded = expandedPersonaGroupIds.includes(group.id);
               const isSynthetic = group.isSynthetic === true;
               return (
                 <div key={group.id} className="rounded-xl bg-[var(--secondary)]/60 ring-1 ring-[var(--border)]/50">
                   {/* Group header */}
                   <div
                     className="flex cursor-pointer items-center gap-1.5 px-2.5 py-2"
-                    onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
+                    onClick={() => togglePersonaGroupExpanded(group.id)}
                   >
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setExpandedGroupId(isExpanded ? null : group.id);
+                        togglePersonaGroupExpanded(group.id);
                       }}
                       className="shrink-0 text-[var(--muted-foreground)]"
                     >
@@ -695,7 +697,7 @@ export function PersonasPanel() {
                               return;
                             }
                             deletePGroup.mutate(group.id);
-                            if (expandedGroupId === group.id) setExpandedGroupId(null);
+                            if (expandedPersonaGroupIds.includes(group.id)) togglePersonaGroupExpanded(group.id);
                             if (assigningToGroup === group.id) setAssigningToGroup(null);
                           }}
                           className="rounded-lg p-1 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
@@ -745,7 +747,12 @@ export function PersonasPanel() {
                                     <User size="0.625rem" />
                                   )}
                                 </div>
-                                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                                <span className="min-w-0 flex-1 truncate">
+                                  {p.name}
+                                  {p.comment && (
+                                    <span className="ml-1.5 italic text-[var(--muted-foreground)]">{p.comment}</span>
+                                  )}
+                                </span>
                                 {!isSynthetic && (
                                   <button
                                     onClick={(e) => {
@@ -808,7 +815,7 @@ export function PersonasPanel() {
       )}
 
       <div className="stagger-children flex flex-col gap-1">
-        {list.map((persona) => {
+        {ungroupedList.map((persona) => {
           const active = isActive(persona);
           const isBulkSelected = selectedPersonaIds.has(persona.id);
           const targetGroup = assigningToGroup ? parsedGroups.find((g) => g.id === assigningToGroup) : null;
