@@ -267,6 +267,9 @@ interface UIState {
   /** Persona-panel group folders currently expanded. Synced + persisted so the
    *  open/closed state survives reloads, storage clears, and other devices. */
   expandedPersonaGroupIds: string[];
+  /** Characters-panel group folders currently expanded. Same persistence as
+   *  expandedPersonaGroupIds. */
+  expandedCharacterGroupIds: string[];
   settingsTab: string;
   modal: { type: string; props?: Record<string, unknown> } | null;
   theme: "dark" | "light";
@@ -503,6 +506,7 @@ interface UIState {
   setTrackerPanelSectionCollapsed: (section: TrackerDataPanelSection, collapsed: boolean) => void;
   toggleTrackerPanelSectionCollapsed: (section: TrackerDataPanelSection) => void;
   togglePersonaGroupExpanded: (id: string) => void;
+  toggleCharacterGroupExpanded: (id: string) => void;
   openRightPanel: (panel: Panel) => void;
   closeRightPanel: () => void;
   toggleRightPanel: (panel: Panel) => void;
@@ -679,6 +683,7 @@ export function pickSyncedSettings(state: UIState) {
     trackerPanelCollapsedSections: state.trackerPanelCollapsedSections,
     trackerPanelSectionOrder: state.trackerPanelSectionOrder,
     expandedPersonaGroupIds: state.expandedPersonaGroupIds,
+    expandedCharacterGroupIds: state.expandedCharacterGroupIds,
     theme: state.theme,
     chatBackground: state.chatBackground,
     chatBackgroundBlur: state.chatBackgroundBlur,
@@ -783,6 +788,7 @@ export const useUIStore = create<UIState>()(
       trackerPanelCollapsedSections: {},
       trackerPanelSectionOrder: [...TRACKER_DATA_PANEL_SECTIONS],
       expandedPersonaGroupIds: [],
+      expandedCharacterGroupIds: [],
       settingsTab: "general",
       modal: null,
       theme: "dark" as const,
@@ -955,6 +961,13 @@ export const useUIStore = create<UIState>()(
           expandedPersonaGroupIds: s.expandedPersonaGroupIds.includes(id)
             ? s.expandedPersonaGroupIds.filter((groupId) => groupId !== id)
             : [...s.expandedPersonaGroupIds, id],
+        })),
+
+      toggleCharacterGroupExpanded: (id) =>
+        set((s) => ({
+          expandedCharacterGroupIds: s.expandedCharacterGroupIds.includes(id)
+            ? s.expandedCharacterGroupIds.filter((groupId) => groupId !== id)
+            : [...s.expandedCharacterGroupIds, id],
         })),
 
       openRightPanel: (panel) => set({ rightPanelOpen: true, rightPanel: panel }),
@@ -1728,6 +1741,7 @@ export const useUIStore = create<UIState>()(
         trackerPanelCollapsedSections: state.trackerPanelCollapsedSections,
         trackerPanelSectionOrder: state.trackerPanelSectionOrder,
         expandedPersonaGroupIds: state.expandedPersonaGroupIds,
+        expandedCharacterGroupIds: state.expandedCharacterGroupIds,
         theme: state.theme,
         chatBackground: state.chatBackground,
         chatBackgroundBlur: state.chatBackgroundBlur,
