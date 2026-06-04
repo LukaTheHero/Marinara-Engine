@@ -65,7 +65,6 @@ type ParsedCharacterRow = CharacterRow & { parsed: Record<string, any> };
 type ParsedGroupRow = GroupRow & { memberIds: string[]; isSynthetic?: boolean };
 
 type SortOption = "name-asc" | "name-desc" | "newest" | "oldest" | "favorites";
-const UNGROUPED_CHARACTER_GROUP_ID = "__ungrouped-characters__";
 
 function getCharacterTags(char: ParsedCharacterRow): string[] {
   return Array.isArray(char.parsed.tags) ? (char.parsed.tags as string[]).filter(Boolean) : [];
@@ -125,6 +124,8 @@ export function CharactersPanel() {
   const openModal = useUIStore((s) => s.openModal);
   const openCharacterDetail = useUIStore((s) => s.openCharacterDetail);
   const openCharacterLibrary = useUIStore((s) => s.openCharacterLibrary);
+  const expandedCharacterGroupIds = useUIStore((s) => s.expandedCharacterGroupIds);
+  const toggleCharacterGroupExpanded = useUIStore((s) => s.toggleCharacterGroupExpanded);
   const activeChat = useChatStore((s) => s.activeChat);
   const updateChat = useUpdateChat();
   const createMessage = useCreateMessage(activeChat?.id ?? null);
@@ -142,7 +143,6 @@ export function CharactersPanel() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("name-asc");
   const [groupsExpanded, setGroupsExpanded] = useState(true);
-  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -393,8 +393,7 @@ export function CharactersPanel() {
 
   const parsedGroups = useMemo<ParsedGroupRow[]>(() => {
     if (!groups) return [];
-    const assignedIds = new Set<string>();
-    const realGroups = (groups as GroupRow[]).map((g) => {
+    return (groups as GroupRow[]).map((g) => {
       const memberIds = (() => {
         try {
           return JSON.parse(g.characterIds);
@@ -402,30 +401,30 @@ export function CharactersPanel() {
           return [];
         }
       })() as string[];
-      for (const id of memberIds) assignedIds.add(id);
       return {
         ...g,
         memberIds,
       };
     });
-    const ungroupedMemberIds = parsedCharacters
-      .filter((char) => !assignedIds.has(char.id))
-      .sort((a, b) => (a.parsed.name ?? "").localeCompare(b.parsed.name ?? ""))
-      .map((char) => char.id);
-    if (ungroupedMemberIds.length === 0) return realGroups;
-    return [
-      ...realGroups,
-      {
-        id: UNGROUPED_CHARACTER_GROUP_ID,
-        name: "Ungrouped",
-        description: "Characters not assigned to any group",
-        characterIds: JSON.stringify(ungroupedMemberIds),
-        avatarPath: null,
-        memberIds: ungroupedMemberIds,
-        isSynthetic: true,
-      },
-    ];
-  }, [groups, parsedCharacters]);
+  }, [groups]);
+
+  // Characters that belong to at least one group. Grouped characters show only
+  // inside their group; the flat list below renders ungrouped characters only.
+  const groupedCharacterIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const group of parsedGroups) {
+      for (const id of group.memberIds) ids.add(id);
+    }
+    return ids;
+  }, [parsedGroups]);
+
+  // The flat list shows ungrouped characters only — grouped characters live
+  // inside their group above. While assigning to a group or bulk-selecting,
+  // show every character so those flows can still reach grouped ones.
+  const ungroupedCharacters = useMemo(() => {
+    if (assigningToGroup || selectionMode) return sortedCharacters;
+    return sortedCharacters.filter((char) => !groupedCharacterIds.has(char.id));
+  }, [sortedCharacters, groupedCharacterIds, assigningToGroup, selectionMode]);
 
   const toggleCharacter = (charId: string) => {
     if (!activeChat) return;
@@ -924,7 +923,7 @@ export function CharactersPanel() {
             )}
 
             {parsedGroups.map((group) => {
-              const isExpanded = expandedGroupId === group.id;
+              const isExpanded = expandedCharacterGroupIds.includes(group.id);
               const isEditing = editingGroupId === group.id;
               const isAssigning = assigningToGroup === group.id;
               const isSynthetic = group.isSynthetic === true;
@@ -937,7 +936,7 @@ export function CharactersPanel() {
                   {/* Group header */}
                   <div
                     className="group relative flex items-center gap-2.5 rounded-xl p-2 transition-all hover:bg-[var(--sidebar-accent)] cursor-pointer"
-                    onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
+                    onClick={() => toggleCharacterGroupExpanded(group.id)}
                   >
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-sm">
                       {isExpanded ? <ChevronDown size="0.875rem" /> : <FolderOpen size="0.875rem" />}
@@ -1011,6 +1010,7 @@ export function CharactersPanel() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 deleteGroup.mutate(group.id);
+                                if (isExpanded) toggleCharacterGroupExpanded(group.id);
                               }}
                               className="rounded-lg p-1 transition-all hover:bg-[var(--destructive)]/15"
                               title="Delete group"
@@ -1139,7 +1139,7 @@ export function CharactersPanel() {
       {/* Characters Section Header */}
       <div className="flex items-center gap-1.5 px-1 pt-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
         <User size="0.6875rem" />
-        Characters ({filteredCharacters.length})
+        Characters ({ungroupedCharacters.length})
         {selectionMode && (
           <span className="text-[0.625rem] font-normal normal-case">· {selectedCharacterIds.size} selected</span>
         )}
@@ -1164,7 +1164,7 @@ export function CharactersPanel() {
       )}
 
       <div className="stagger-children flex flex-col gap-1">
-        {sortedCharacters.map((char) => {
+        {ungroupedCharacters.map((char) => {
           const charName = char.parsed.name ?? "Unnamed";
           const charTitle = getCharacterTitle({ name: charName, comment: char.comment });
           const charTags = getCharacterTags(char);
