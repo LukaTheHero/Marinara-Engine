@@ -33,6 +33,8 @@ import {
   Tag,
   Hash,
   Star,
+  Wand2,
+  MessageCircle,
 } from "lucide-react";
 import { getCharacterTitle } from "../../lib/character-display";
 import { useUIStore, type CharacterLibrarySort } from "../../stores/ui.store";
@@ -43,6 +45,8 @@ import { estimateCharacterCardTokens, formatEstimatedTokens } from "../../lib/ch
 import { SelectionActionBar } from "../ui/SelectionActionBar";
 import { SmoothFolderContent } from "../ui/SmoothFolderContent";
 import { TouchDragHandle } from "../ui/TouchDragHandle";
+import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
+import { useStartChatFromCharacter } from "../../hooks/use-start-chat-from-character";
 
 type CharacterRow = {
   id: string;
@@ -145,6 +149,7 @@ export function CharactersPanel() {
   const createGroup = useCreateGroup();
   const updateGroup = useUpdateGroup();
   const deleteGroup = useDeleteGroup();
+  const { startChatFromCharacter } = useStartChatFromCharacter();
   const openModal = useUIStore((s) => s.openModal);
   const openCharacterDetail = useUIStore((s) => s.openCharacterDetail);
   const openCharacterLibrary = useUIStore((s) => s.openCharacterLibrary);
@@ -168,6 +173,30 @@ export function CharactersPanel() {
   const setCharacterPanelScrollTop = useUIStore((s) => s.setCharacterPanelScrollTop);
 
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  // Right-click "Quick Start" menu for a character row (roleplay / conversation),
+  // mirroring the Bot Browser panel so library characters get the same shortcut.
+  const [characterContextMenu, setCharacterContextMenu] = useState<{
+    x: number;
+    y: number;
+    charId: string;
+    charName: string;
+    firstMes?: string;
+    altGreetings?: string[];
+  } | null>(null);
+  const openCharacterContextMenu = useCallback((x: number, y: number, char: ParsedCharacterRow) => {
+    const firstMes = typeof char.parsed.first_mes === "string" ? char.parsed.first_mes : undefined;
+    const altGreetings = Array.isArray(char.parsed.alternate_greetings)
+      ? (char.parsed.alternate_greetings as unknown[]).filter((g): g is string => typeof g === "string")
+      : [];
+    setCharacterContextMenu({
+      x,
+      y,
+      charId: char.id,
+      charName: char.parsed.name ?? "Unnamed",
+      firstMes,
+      altGreetings,
+    });
+  }, []);
   const [editGroupName, setEditGroupName] = useState("");
   const [draggedCharacterId, setDraggedCharacterId] = useState<string | null>(null);
   const panelScrollRef = useRef<HTMLDivElement | null>(null);
@@ -980,6 +1009,11 @@ export function CharactersPanel() {
                         }
                         openCharacterDetailFromPanel(memberId);
                       }}
+                      onContextMenu={(e) => {
+                        if (!fullMember) return;
+                        e.preventDefault();
+                        openCharacterContextMenu(e.clientX, e.clientY, fullMember);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key !== "Enter" && e.key !== " ") return;
                         e.preventDefault();
@@ -1216,6 +1250,10 @@ export function CharactersPanel() {
                   openCharacterDetailFromPanel(char.id);
                 }
               }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                openCharacterContextMenu(e.clientX, e.clientY, char);
+              }}
               draggable
               onDragStart={(event) => {
                 const ids = getDraggedCharacterIds(char.id);
@@ -1396,6 +1434,42 @@ export function CharactersPanel() {
           exporting={exportingSelected}
         />
       )}
+
+      {characterContextMenu &&
+        (() => {
+          const items: ContextMenuItem[] = [
+            {
+              label: "Quick Start Roleplay",
+              icon: <Wand2 size="0.75rem" />,
+              onSelect: () =>
+                startChatFromCharacter({
+                  characterId: characterContextMenu.charId,
+                  characterName: characterContextMenu.charName,
+                  mode: "roleplay",
+                  firstMessage: characterContextMenu.firstMes,
+                  alternateGreetings: characterContextMenu.altGreetings,
+                }),
+            },
+            {
+              label: "Quick Start Conversation",
+              icon: <MessageCircle size="0.75rem" />,
+              onSelect: () =>
+                startChatFromCharacter({
+                  characterId: characterContextMenu.charId,
+                  characterName: characterContextMenu.charName,
+                  mode: "conversation",
+                }),
+            },
+          ];
+          return (
+            <ContextMenu
+              x={characterContextMenu.x}
+              y={characterContextMenu.y}
+              items={items}
+              onClose={() => setCharacterContextMenu(null)}
+            />
+          );
+        })()}
     </div>
   );
 }
